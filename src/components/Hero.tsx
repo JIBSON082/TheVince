@@ -3,14 +3,14 @@
 /**
  * Hero.tsx — The VINCE
  * ─────────────────────────────────────────────────────────────────────
- * Depth-sandwich effect: "THE VINCE" exists on two z-index layers.
- *  - NameLayer clip="bottom"  z-index 1  → sits BEHIND the portrait
- *  - Portrait                 z-index 2
- *  - Vignette overlay         z-index 3
- *  - NameLayer clip="top"     z-index 4  → floats IN FRONT of portrait
- *  - Topbar / Footer / Cues   z-index 9
+ * Depth-sandwich effect: a scrolling marquee exists on two z-index layers.
+ *  - MarqueeLayer clip="bottom"  z-index 1  → sits BEHIND the portrait
+ *  - Portrait                    z-index 2
+ *  - Vignette overlay            z-index 3
+ *  - MarqueeLayer clip="top"     z-index 4  → floats IN FRONT of portrait
+ *  - Topbar / Footer / Cues      z-index 9
  *
- * The subject stands literally INSIDE their own name.
+ * The subject stands literally INSIDE a continuously scrolling line of text.
  * ─────────────────────────────────────────────────────────────────────
  */
 
@@ -33,36 +33,39 @@ function IrisText({ children, className = "" }: { children: React.ReactNode; cla
   );
 }
 
-// ─── GlobeSVG ─────────────────────────────────────────────────────────
+// ─── GlobeSVG — refined, polished outline globe ───────────────────────
 function GlobeSVG() {
   return (
     <svg
       viewBox="0 0 100 100"
       fill="none"
-      className="w-7 h-7 animate-[globe-turn_5.5s_ease-in-out_infinite]"
+      className="w-[22px] h-[22px]"
       aria-hidden="true"
     >
-      <circle cx="50" cy="50" r="45" stroke="#f0ece2" strokeWidth="2.2" />
-      <ellipse cx="50" cy="50" rx="21" ry="45" stroke="#f0ece2" strokeWidth="1.6" />
-      <ellipse cx="50" cy="50" rx="45" ry="17" stroke="#f0ece2" strokeWidth="1.4" />
-      <line x1="5"  y1="50" x2="95" y2="50" stroke="#f0ece2" strokeWidth="1.4" />
-      <line x1="50" y1="5"  x2="50" y2="95" stroke="#f0ece2" strokeWidth="1.4" />
+      <circle cx="50" cy="50" r="40" stroke="#f0ece2" strokeWidth="2.4" />
+      <path
+        d="M50 10 C 34 10 26 28 26 50 C 26 72 34 90 50 90 C 66 90 74 72 74 50 C 74 28 66 10 50 10 Z"
+        stroke="#f0ece2"
+        strokeWidth="1.6"
+      />
+      <ellipse cx="50" cy="50" rx="40" ry="13.5" stroke="#f0ece2" strokeWidth="1.6" />
+      <line x1="10" y1="50" x2="90" y2="50" stroke="#f0ece2" strokeWidth="1.6" />
     </svg>
   );
 }
 
-// ─── NameLayer ────────────────────────────────────────────────────────
-type NameLayerProps = { clip: "top" | "bottom"; loaded: boolean };
+// ─── MarqueeLayer ───────────────────────────────────────────────────────
+type MarqueeLayerProps = { clip: "top" | "bottom"; loaded: boolean };
 
-function NameLayer({ clip, loaded }: NameLayerProps) {
+function MarqueeLayer({ clip, loaded }: MarqueeLayerProps) {
   const isFront = clip === "top";
+  const ITEM = "ART DIRECTOR OF THE STREET";
 
   return (
     <div
       aria-hidden="true"
-      className="absolute left-0 right-0 select-none pointer-events-none pl-0.5 whitespace-nowrap font-display uppercase tracking-[-0.025em] leading-[0.84] text-[#f0ece2]"
+      className="absolute left-0 right-0 select-none pointer-events-none overflow-hidden"
       style={{
-        fontSize: "clamp(62px, 19.5vw, 210px)",
         bottom: "76px",
         zIndex: isFront ? 4 : 1,
         // Front layer: show only top 52% — portrait face shows through below
@@ -73,7 +76,19 @@ function NameLayer({ clip, loaded }: NameLayerProps) {
         transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.5s, transform 0.9s cubic-bezier(0.16,1,0.3,1) 0.5s",
       }}
     >
-      THE&nbsp;V<IrisText>I</IrisText>NCE
+      <div
+        className="flex whitespace-nowrap font-display uppercase tracking-[-0.02em] leading-[0.84] text-[#f0ece2] animate-[marquee-scroll_22s_linear_infinite]"
+        style={{ fontSize: "clamp(62px, 19.5vw, 210px)" }}
+      >
+        {Array.from({ length: 6 }).map((_, i) => (
+          <span key={i} className="flex items-center pl-0.5">
+            {ITEM}
+            <span className="inline-flex items-center justify-center mx-8 md:mx-10">
+              <IrisText>★</IrisText>
+            </span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -91,7 +106,7 @@ export default function Hero() {
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // Cursor parallax — portrait drifts ±7px, name layers stay fixed
+  // Cursor parallax — portrait drifts ±7px, marquee layers stay fixed
   useEffect(() => {
     const MAX = 7;
     const onMove = (e: MouseEvent) => {
@@ -141,8 +156,8 @@ export default function Hero() {
         }}
       />
 
-      {/* ── Name — BACK (z1, behind portrait) ─────────────────── */}
-      <NameLayer clip="bottom" loaded={loaded} />
+      {/* ── Marquee — BACK (z1, behind portrait) ──────────────── */}
+      <MarqueeLayer clip="bottom" loaded={loaded} />
 
       {/* ── Portrait (z2) ─────────────────────────────────────── */}
       <div
@@ -156,7 +171,7 @@ export default function Hero() {
           fill
           priority
           sizes="100vw"
-          className="object-cover object-[center_12%]"
+          className="object-cover object-[center_22%]"
           style={{
             opacity:    loaded ? 1 : 0,
             transition: "opacity 1s cubic-bezier(0.16,1,0.3,1) 0.2s",
@@ -175,8 +190,8 @@ export default function Hero() {
         />
       </div>
 
-      {/* ── Name — FRONT (z4, above portrait) ─────────────────── */}
-      <NameLayer clip="top" loaded={loaded} />
+      {/* ── Marquee — FRONT (z4, above portrait) ──────────────── */}
+      <MarqueeLayer clip="top" loaded={loaded} />
 
       {/* ── Topbar (z9) ───────────────────────────────────────── */}
       <header
@@ -187,17 +202,17 @@ export default function Hero() {
         <h1 className="sr-only">The VINCE — Creative Designer &amp; Digital Artist</h1>
 
         <span className="font-mono text-[10.5px] tracking-[0.09em] uppercase text-[#f0ece2]/60">
-          © The VINCE
+          © Design by The Vince
         </span>
 
         <button
           aria-label="Open navigation menu"
-          className="flex items-center gap-2 font-mono text-[10.5px] tracking-[0.09em] uppercase text-[#f0ece2]/60 bg-transparent border-0 cursor-pointer transition-opacity duration-200 hover:opacity-100"
+          className="flex items-center gap-2.5 font-sans font-medium text-base tracking-[-0.01em] text-[#f0ece2]/90 bg-transparent border-0 cursor-pointer transition-opacity duration-200 hover:opacity-100"
         >
           {/* Iridescent pulsing pip */}
           <span
             aria-hidden="true"
-            className="w-[5px] h-[5px] rounded-full flex-shrink-0 animate-[pip-pulse_2.8s_ease-in-out_infinite]"
+            className="w-2 h-2 rounded-full flex-shrink-0 animate-[pip-pulse_2.8s_ease-in-out_infinite]"
             style={{ background: IRIS }}
           />
           Menu
@@ -258,4 +273,3 @@ export default function Hero() {
     </section>
   );
 }
-
