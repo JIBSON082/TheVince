@@ -66,24 +66,25 @@ function MarqueeLayer({ clip, loaded }: MarqueeLayerProps) {
       aria-hidden="true"
       className="absolute left-0 right-0 select-none pointer-events-none overflow-hidden"
       style={{
-        bottom: "76px",
+        bottom: "100px",
+        height: "90px",
         zIndex: isFront ? 4 : 1,
-        // Front layer: show only top 52% — portrait face shows through below
-        // Back layer:  show only bottom 48% — peeks out behind the face
-        clipPath: isFront ? "inset(0 0 48% 0)" : "inset(52% 0 0 0)",
+        // Front layer: show only top half — portrait face shows through below
+        // Back layer:  show only bottom half — peeks out behind the face
+        clipPath: isFront ? "inset(0 0 50% 0)" : "inset(50% 0 0 0)",
         opacity: loaded ? 1 : 0,
         transform: loaded ? "translateY(0)" : `translateY(${isFront ? "-14px" : "14px"})`,
         transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.5s, transform 0.9s cubic-bezier(0.16,1,0.3,1) 0.5s",
       }}
     >
       <div
-        className="flex whitespace-nowrap font-display uppercase tracking-[-0.02em] leading-[0.84] text-[#f0ece2] animate-[marquee-scroll_22s_linear_infinite]"
-        style={{ fontSize: "clamp(62px, 19.5vw, 210px)" }}
+        className="flex items-center whitespace-nowrap font-display uppercase tracking-[-0.01em] leading-none text-[#f0ece2] animate-[marquee-scroll_26s_linear_infinite]"
+        style={{ fontSize: "clamp(28px, 7.5vw, 72px)", height: "90px" }}
       >
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 8 }).map((_, i) => (
           <span key={i} className="flex items-center pl-0.5">
             {ITEM}
-            <span className="inline-flex items-center justify-center mx-8 md:mx-10">
+            <span className="inline-flex items-center justify-center mx-6 md:mx-8">
               <IrisText>★</IrisText>
             </span>
           </span>
