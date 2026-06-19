@@ -1,1 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Mono:wght@400;700&family=Space+Grotesk:wght@300;400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink:  #090909;
+  --bone: #f0ece2;
+}
+
+html, body {
+  background: var(--ink);
+  color: var(--bone);
+  overflow-x: hidden;
+}
+
+/* Shared iris gradient — text version */
+.iris-text {
+  background: linear-gradient(110deg, #c8a2ff 0%, #7dd4fc 38%, #f0abfc 68%, #86efac 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Shared iris gradient — background version (for dots, borders, etc.) */
+.iris-bg {
+  background: linear-gradient(110deg, #c8a2ff 0%, #7dd4fc 38%, #f0abfc 68%, #86efac 100%);
+}
 
