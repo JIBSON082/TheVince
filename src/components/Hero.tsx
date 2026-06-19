@@ -16,7 +16,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { HERO_IMAGE_SRC } from "./heroImage";
+const HERO_IMAGE_SRC = "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1781828709/Heroimage_hgsqux.png";
 
 // ─── Iris gradient constant (single source of truth) ──────────────────
 const IRIS = "linear-gradient(110deg,#c8a2ff 0%,#7dd4fc 38%,#f0abfc 68%,#86efac 100%)";
