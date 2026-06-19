@@ -19,6 +19,10 @@ const config = {
           from: { left: "-10rem" },
           to:   { left: "calc(100% + 10rem)" },
         },
+        "marquee-scroll": {
+  from: { transform: "translateX(0)" },
+  to:   { transform: "translateX(-50%)" },
+},
         "pip-pulse": {
           "0%,100%": { transform: "scale(1)",   opacity: "1" },
           "50%":     { transform: "scale(1.7)", opacity: "0.5" },
