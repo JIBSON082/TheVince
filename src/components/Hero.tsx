@@ -85,6 +85,24 @@ export default function Hero() {
   const [loaded, setLoaded] = useState(false);
   const globeRef = useRef<HTMLDivElement>(null);
 
+  // ── Reveal safety net ────────────────────────────────────────────
+  // Every visible element's opacity is gated on `loaded`, which was
+  // previously set ONLY inside the hidden <img>'s onLoad/onError
+  // handlers. If that image request ever hangs — no response, no
+  // error, just silence (CSP block, ad-blocker, slow/unreachable
+  // CDN edge, offline) — onLoad/onError never fire, `loaded` stays
+  // false forever, and EVERY element on the page stays invisible
+  // permanently. That was the cause of the blank page.
+  //
+  // Fix: a hard 1.2s timeout guarantees the page reveals itself
+  // regardless of what happens to the image request. If the image
+  // does load/error normally before that, the timeout is cleared and
+  // has no effect — this only kicks in as a fallback.
+  useEffect(() => {
+    const timeout = setTimeout(() => setLoaded(true), 1200);
+    return () => clearTimeout(timeout);
+  }, []);
+
   // Subtle mouse-parallax on the globe only — figure + headline stay
   // completely static.
   useEffect(() => {
@@ -181,13 +199,24 @@ export default function Hero() {
         >
           {/* This div IS the rendered square (source is 1:1, so
               aspect-ratio:1/1 here exactly reproduces what
-              object-fit:contain would have rendered). */}
+              object-fit:contain would have rendered).
+
+              BUG FIX: width must be an explicit value (100%), not
+              "auto"/unset. A <div> styled with background-image has
+              ZERO intrinsic content size — unlike an <img src>, which
+              has natural width/height to size from. With width:auto,
+              aspect-ratio:1/1, and minWidth:0 (no flex auto-minimum
+              floor), this box was collapsing to 0×0 and the image
+              never appeared, even though backgroundImage was set
+              correctly. width:100% (of the flex item's available
+              space) gives aspect-ratio a real value to size against;
+              maxHeight:100% then caps it so it never overflows the
+              parent vertically. */}
           <div
             className="relative"
             style={{
-              maxWidth: "100%",
+              width: "100%",
               maxHeight: "100%",
-              minWidth: 0,
               aspectRatio: "1 / 1",
               transform: "translateX(4%)",
               backgroundImage: `url(${IMAGE_URL})`,
@@ -225,10 +254,14 @@ export default function Hero() {
             transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.3s",
           }}
         >
-          {/* Identical square to the figure's rendered box */}
+          {/* Identical square to the figure's rendered box — same
+              width:100% fix applies here (see figure box comment
+              above): this div has no img/content, only nested
+              absolutely-positioned children, so it also needs an
+              explicit width for aspect-ratio to size against. */}
           <div
             className="relative"
-            style={{ maxWidth: "100%", maxHeight: "100%", minWidth: 0, aspectRatio: "1 / 1", transform: "translateX(4%)" }}
+            style={{ width: "100%", maxHeight: "100%", aspectRatio: "1 / 1", transform: "translateX(4%)" }}
           >
             {/* Circular clip window — height-driven + aspectRatio:1/1
                 guarantees a TRUE circle. top/left % are relative to
