@@ -114,7 +114,7 @@ export default function Hero() {
           style={{ zIndex: 9, ...revealDown("0.05s") }}
         >
           <span
-            className="text-black/70 text-[10.5px] tracking-[0.09em] uppercase"
+            className="text-black/70 text-[42px] tracking-[0.09em] uppercase"
             style={{ fontFamily: "'Space Mono', monospace" }}
           >
             © Design by The VINCE
@@ -122,7 +122,7 @@ export default function Hero() {
 
           <button
             aria-label="Open navigation menu"
-            className="flex items-center gap-2 text-black/70 text-[10.5px] tracking-[0.09em] uppercase bg-transparent border-0 cursor-pointer hover:opacity-100 transition-opacity duration-200"
+            className="flex items-center gap-2 text-black/70 text-[42px] tracking-[0.09em] uppercase bg-transparent border-0 cursor-pointer hover:opacity-100 transition-opacity duration-200"
             style={{ fontFamily: "'Space Mono', monospace" }}
           >
             <span
@@ -286,7 +286,7 @@ export default function Hero() {
             {[0, 1].map((i) => (
               <span
                 key={i}
-                className="text-black/80 text-[10px] tracking-[0.18em] uppercase px-4 flex-shrink-0"
+                className="text-black/80 text-[25px] tracking-[0.18em] uppercase px-4 flex-shrink-0"
                 style={{ fontFamily: "'Space Mono', monospace" }}
               >
                 {MARQUEE_TEXT.repeat(8)}
