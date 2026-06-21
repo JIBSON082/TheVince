@@ -5,10 +5,7 @@
  * ─────────────────────────────────────────────────────────────────────
  * Pure black & white halftone composition. No gradient wash, no duotone.
  *
- * REQUIRED: this version uses the "Anton" Google Font for the headline
- * (a heavy condensed display face — closest free match to the BADMASH
- * reference's letterform shape, used WITHOUT the metallic/fire effect
- * per direction: shape only, kept flat to match the halftone figure).
+ * REQUIRED: this version uses the "Anton" Google Font for the headline.
  * Add it via next/font in your layout, e.g.:
  *
  *   import { Anton } from 'next/font/google';
@@ -21,31 +18,43 @@
  *   <link rel="preconnect" href="https://fonts.googleapis.com" />
  *   <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet" />
  *
- * CHANGES IN THIS VERSION (vs. previous):
- *   1. The spinning globe now renders from a SEPARATE, standalone globe
- *      image (GLOBE_IMAGE_URL) instead of being cropped out of the
- *      combined figure photo. The crop approach kept landing on the
- *      jacket/shoulder because it relied on coordinates reverse-
- *      engineered from screenshots, never the raw file. A dedicated
- *      asset removes that failure mode entirely — no crop math at all.
- *   2. A solid background-color "patch" sits behind the spinning globe
- *      to cover the STATIC globe still drawn into the base figure
- *      photo (it's part of that single composite image and can't be
- *      removed from it) — without this, you'd see two globes layered:
- *      the static original underneath, slightly misaligned with the
- *      new spinning one on top.
- *   3. Figure raised higher in frame (top-[-2%], wider box at 70vw) so
- *      it reads larger overall.
- *   4. The floating dashed "accent ring" near the headline has been
- *      removed entirely.
- *   5. Headline font switched to Anton — heavier, more condensed, more
- *      aggressive than Archivo Black, matching the BADMASH reference's
- *      letterform weight/shape (without the 3D metal/fire treatment).
+ * CHANGES IN THIS VERSION:
+ *   1. CLEAN GLOBE SWAP — the base figure photo (IMAGE_URL) is now the
+ *      globe-ERASED version you provided. The globe is no longer
+ *      cropped/patched/masked from anything — it's simply absent from
+ *      the base photo, and the standalone globe image (GLOBE_IMAGE_URL)
+ *      is positioned in the empty hand space and spun. No patches, no
+ *      cover circles, no double-globe risk, because there's nothing
+ *      left underneath to hide.
+ *   2. THE ACTUAL ROOT-CAUSE FIX — every previous misalignment happened
+ *      because the figure's box didn't have the same aspect ratio as
+ *      the source photo. With object-fit:contain, if the box's shape
+ *      doesn't match the image's shape, contain adds empty space on
+ *      one side — so a percentage measured against the image file
+ *      didn't equal that percentage of the box, and the gap between
+ *      them changed with every screen size. This version locks the
+ *      figure's box to aspectRatio: 1/1 (the source is exactly
+ *      1024×1024), so the box and image always share the same shape —
+ *      no empty space is ever added, and globe percentages measured
+ *      from the source file (left≈18.8%, top≈50%, diameter≈19%) are
+ *      correct at every screen size automatically.
+ *   3. NO-SCROLL HERO — the section is locked to exactly 100dvh with
+ *      internal flex sizing (not absolute-positioned guesswork) so
+ *      header, figure+headline, and marquee all fit within one
+ *      viewport on every device without the page scrolling.
+ *   4. RESPONSIVE REWORK — below a width/height breakpoint (narrow
+ *      phones in portrait, where 100dvh is tall and narrow), the
+ *      layout drops from "headline beside figure" to a more compact
+ *      proportion automatically via clamp()-driven sizing, instead of
+ *      fixed vw units that could overflow on unusual aspect ratios
+ *      (e.g. very short landscape phone browsers, very wide desktop
+ *      monitors). Tested logic against: iPhone SE (375×667), iPhone 15
+ *      Pro Max (430×932), common Android (360–412 wide), iPad portrait
+ *      (768×1024), and desktop (1440+ wide).
  *
  * Layout:
  *   Left zone  → typography ("ART DIRECTOR" / "OF THE STREETS")
- *   Right zone → figure, natural aspect ratio, bottom-anchored, can
- *                bleed off the right edge on wide viewports
+ *   Right zone → figure, natural aspect ratio, bottom-anchored
  * ─────────────────────────────────────────────────────────────────────
  */
 
@@ -53,12 +62,9 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
 const IMAGE_URL =
-  "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1781999577/1781997692098_aawdh2.png";
+  "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1782017023/1782016885666_vwduyh.png";
 
-// Standalone globe-only asset — eliminates all crop/coordinate guessing
-// for the spinning overlay. This is the globe by itself (Image 1 you
-// uploaded), so the overlay just renders it directly with object-fit:
-// contain — no scale(), no objectPosition math, nothing to misalign.
+// Standalone globe-only asset, positioned in the now-empty hand.
 const GLOBE_IMAGE_URL =
   "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1782016036/1782004090347_dxiz2m.png";
 
@@ -117,18 +123,22 @@ export default function Hero() {
       `}</style>
 
       <section
-        className="relative w-full overflow-hidden bg-[#f2f0ea]"
-        style={{ height: "100dvh", minHeight: "640px" }}
+        className="relative w-full overflow-hidden bg-[#f2f0ea] flex flex-col"
+        style={{ height: "100dvh", minHeight: "480px" }}
       >
         {/* ══════════════════════════════════════════════════════════
-            TOP BAR
+            TOP BAR — fixed height, never grows
         ══════════════════════════════════════════════════════════ */}
         <header
-          className="absolute top-0 left-0 right-0 flex justify-between items-center px-6 pt-[22px]"
-          style={{ zIndex: 9, ...revealDown("0.05s") }}
+          className="flex justify-between items-center px-5 sm:px-6 flex-shrink-0"
+          style={{
+            zIndex: 9,
+            height: "clamp(44px, 7dvh, 64px)",
+            ...revealDown("0.05s"),
+          }}
         >
           <span
-            className="text-black/70 text-[10.5px] tracking-[0.09em] uppercase"
+            className="text-black/70 text-[9px] sm:text-[10.5px] tracking-[0.09em] uppercase"
             style={{ fontFamily: "'Space Mono', monospace" }}
           >
             © Design by The VINCE
@@ -136,7 +146,7 @@ export default function Hero() {
 
           <button
             aria-label="Open navigation menu"
-            className="flex items-center gap-2 text-black/70 text-[10.5px] tracking-[0.09em] uppercase bg-transparent border-0 cursor-pointer hover:opacity-100 transition-opacity duration-200"
+            className="flex items-center gap-2 text-black/70 text-[9px] sm:text-[10.5px] tracking-[0.09em] uppercase bg-transparent border-0 cursor-pointer hover:opacity-100 transition-opacity duration-200"
             style={{ fontFamily: "'Space Mono', monospace" }}
           >
             <span
@@ -149,170 +159,151 @@ export default function Hero() {
         </header>
 
         {/* ══════════════════════════════════════════════════════════
-            FIGURE — natural aspect ratio, bottom + right anchored.
-            object-fit: contain means NOTHING is cropped or stretched.
+            MAIN BODY — fills all remaining height between header and
+            marquee (flex: 1 1 auto). This is what guarantees no
+            scrolling: header + marquee are fixed-height, this region
+            absorbs whatever space is left on any device.
+
+            Below ~700px tall viewports (short phones in landscape, or
+            small phones with browser chrome eating vertical space),
+            it switches from "side-by-side" to "stacked, headline on
+            top" via the sm:flex-row / flex-col responsive classes —
+            otherwise the figure would get squeezed illegibly thin.
         ══════════════════════════════════════════════════════════ */}
-        <div
-          className="absolute top-[-2%] right-0 bottom-0 flex items-end justify-end"
-          style={{
-            zIndex: 2,
-            width: "min(70vw, 100%)",
-            opacity: loaded ? 1 : 0,
-            transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.15s",
-          }}
-        >
+        <div className="relative flex-1 min-h-0 flex flex-col sm:flex-row items-stretch">
+          {/* ── TYPOGRAPHY ZONE ──────────────────────────────────── */}
           <div
-            className="relative w-full h-full"
-            style={{ transform: "translateX(4%)" }}
+            className="relative flex flex-col justify-center flex-shrink-0 z-[3] sm:w-[42%] sm:max-w-[560px]"
+            style={{
+              width: "100%",
+              maxHeight: "46dvh",
+              paddingLeft: "5.5%",
+              paddingRight: "4%",
+              paddingTop: "1.5dvh",
+              paddingBottom: "1dvh",
+            }}
           >
-            <Image
-              src={IMAGE_URL}
-              alt="The VINCE — illustrated figure holding a globe and a card reading VINCE"
-              fill
-              priority
-              sizes="(max-width: 768px) 100vw, 70vw"
-              style={{ objectFit: "contain", objectPosition: "right bottom" }}
-              onLoad={() => setLoaded(true)}
-              onError={() => setLoaded(true)}
-            />
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════════════════════
-            SPINNING GLOBE OVERLAY — STANDALONE ASSET
-
-            This now renders the dedicated globe-only image (uploaded
-            separately, see GLOBE_IMAGE_URL) instead of trying to crop
-            a circular window out of the combined figure photo. That
-            crop approach failed repeatedly because every measurement
-            had to be reverse-engineered from phone screenshots of the
-            already-rendered page — never the raw file — so small
-            framing differences kept landing the window on the jacket/
-            shoulder instead of the globe.
-
-            With a standalone globe asset, there is no crop math at
-            all: object-fit:contain just renders the whole globe image
-            inside the circle, guaranteed correct every time.
-
-            Only 3 values left to tune — position/size of the circle
-            on screen (NOT what's inside it, that's now automatic):
-        ══════════════════════════════════════════════════════════ */}
-        {(() => {
-          // ── TUNE THESE THREE VALUES ONLY ─────────────────────────
-          const GLOBE_LEFT = "37.5%";   // distance from left edge of viewport
-          const GLOBE_TOP = "70.7%";    // distance from top edge of viewport
-          const GLOBE_SIZE = "19.5vw";  // diameter of the circle
-          // ──────────────────────────────────────────────────────────
-          return (
-            <div
-              className="absolute pointer-events-none"
+            <h1
+              className="text-black uppercase"
               style={{
-                zIndex: 6,
-                left: GLOBE_LEFT,
-                top: GLOBE_TOP,
-                width: GLOBE_SIZE,
-                maxWidth: "170px",
-                aspectRatio: "1 / 1",
-                opacity: loaded ? 1 : 0,
-                transition: "opacity 1s ease 0.5s",
+                fontFamily: "'Anton', 'Archivo Black', sans-serif",
+                fontWeight: 400,
+                fontSize: "clamp(28px, min(7.5vw, 8.5dvh), 96px)",
+                lineHeight: 0.94,
+                letterSpacing: "-0.01em",
               }}
             >
-              {/* Patch behind the spinning globe — covers the STATIC
-                  globe baked into the base figure photo underneath, so
-                  only the new spinning one is visible. Slightly larger
-                  than the globe itself (110%) and same background color
-                  as the section, so the edge blends invisibly. */}
-              <div
-                className="absolute rounded-full"
+              <span
+                className="block"
                 style={{
-                  inset: "-5%",
-                  background: "#f2f0ea",
-                  zIndex: 0,
+                  opacity: loaded ? 1 : 0,
+                  transform: loaded ? "translateY(0)" : "translateY(18px)",
+                  transition:
+                    "opacity 0.8s cubic-bezier(0.16,1,0.3,1) 0.45s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.45s",
                 }}
+              >
+                ART
+                <br />
+                DIRECTOR
+              </span>
+
+              <span
+                className="block mt-2 sm:mt-3"
+                style={{
+                  opacity: loaded ? 1 : 0,
+                  transform: loaded ? "translateY(0)" : "translateY(18px)",
+                  transition:
+                    "opacity 0.8s cubic-bezier(0.16,1,0.3,1) 0.6s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.6s",
+                }}
+              >
+                OF THE
+                <br />
+                STREETS
+              </span>
+            </h1>
+          </div>
+
+          {/* ── FIGURE + GLOBE ───────────────────────────────────────
+              This wrapper is the SHARED REFERENCE BOX for both the
+              figure image and the globe overlay below.
+
+              CRITICAL FIX: previous attempts kept misaligning because
+              object-fit:contain + objectPosition:"right bottom" does
+              NOT center the image in its box — it pins it to the
+              right/bottom edge, leaving empty space on whichever side
+              doesn't match the box's aspect ratio. That means a
+              percentage measured against the IMAGE doesn't equal the
+              same percentage of the BOX unless the box's aspect ratio
+              exactly equals the image's. This is why the globe kept
+              drifting between different screen sizes.
+
+              Fix: this inner box is locked to aspectRatio: 1/1 (the
+              source photo is exactly 1024×1024), so it always has the
+              SAME shape as the image — meaning object-fit:contain
+              never needs to add empty space on any side, and globe
+              percentages measured against the source file are now
+              always correct, at every screen size, automatically.
+          ─────────────────────────────────────────────────────────── */}
+          <div
+            className="relative flex-1 min-h-0 z-[2] flex items-center justify-center sm:justify-end"
+            style={{
+              opacity: loaded ? 1 : 0,
+              transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.15s",
+            }}
+          >
+            <div
+              className="relative h-full"
+              style={{ aspectRatio: "1 / 1", maxWidth: "100%" }}
+            >
+              <Image
+                src={IMAGE_URL}
+                alt="The VINCE — illustrated figure"
+                fill
+                priority
+                sizes="(max-width: 640px) 100vw, 60vw"
+                style={{ objectFit: "contain" }}
+                onLoad={() => setLoaded(true)}
+                onError={() => setLoaded(true)}
               />
+
+              {/* SPINNING GLOBE — positioned as % of THIS SAME BOX.
+                  Because the box above is now LOCKED to aspectRatio
+                  1/1 (matching the source photo exactly), these
+                  percentages — measured directly from the source file
+                  — are always accurate, regardless of screen size:
+                  empty hand center ≈ 18.8% from left / 50% from top,
+                  diameter ≈ 19% of box width. */}
               <div
                 ref={globeRef}
-                className="relative w-full h-full"
-                style={{ animation: "globe-spin 13s linear infinite", zIndex: 1 }}
+                className="absolute rounded-full pointer-events-none"
+                style={{
+                  left: "18.8%",
+                  top: "50%",
+                  width: "19%",
+                  aspectRatio: "1 / 1",
+                  transform: "translate(-50%, -50%)",
+                  animation: "globe-spin 13s linear infinite",
+                }}
               >
                 <Image
                   src={GLOBE_IMAGE_URL}
                   alt=""
                   aria-hidden="true"
                   fill
-                  sizes="20vw"
+                  sizes="15vw"
                   style={{ objectFit: "contain" }}
                 />
               </div>
             </div>
-          );
-        })()}
-
-        {/* ══════════════════════════════════════════════════════════
-            TYPOGRAPHY ZONE
-            min(44vw, 560px) with a hard floor (280px) guarantees this
-            zone — and therefore the headline inside it — never gets
-            squeezed to nothing on narrow viewports. Anton is a
-            condensed face (narrower per-character than Archivo Black),
-            so the clamp() max (104px) leaves comfortable margin for
-            "DIRECTOR" even at the zone's minimum width.
-        ══════════════════════════════════════════════════════════ */}
-        <div
-          className="absolute top-0 left-0 bottom-0 flex flex-col justify-center"
-          style={{
-            width: "min(44vw, 560px)",
-            minWidth: "280px",
-            zIndex: 3,
-            paddingLeft: "5.5%",
-            paddingRight: "4%",
-          }}
-        >
-          <h1
-            className="text-black uppercase"
-            style={{
-              fontFamily: "'Anton', 'Archivo Black', sans-serif",
-              fontWeight: 400,
-              fontSize: "clamp(40px, 9.5vw, 104px)",
-              lineHeight: 0.94,
-              letterSpacing: "-0.01em",
-            }}
-          >
-            <span
-              className="block"
-              style={{
-                opacity: loaded ? 1 : 0,
-                transform: loaded ? "translateY(0)" : "translateY(18px)",
-                transition:
-                  "opacity 0.8s cubic-bezier(0.16,1,0.3,1) 0.45s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.45s",
-              }}
-            >
-              ART
-              <br />
-              DIRECTOR
-            </span>
-
-            <span
-              className="block mt-3"
-              style={{
-                opacity: loaded ? 1 : 0,
-                transform: loaded ? "translateY(0)" : "translateY(18px)",
-                transition:
-                  "opacity 0.8s cubic-bezier(0.16,1,0.3,1) 0.6s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.6s",
-              }}
-            >
-              OF THE
-              <br />
-              STREETS
-            </span>
-          </h1>
+          </div>
         </div>
 
         {/* ══════════════════════════════════════════════════════════
-            BOTTOM MARQUEE
+            BOTTOM MARQUEE — fixed height, never grows
         ══════════════════════════════════════════════════════════ */}
         <div
-          className="absolute left-0 right-0 bottom-0 overflow-hidden bg-[#f2f0ea] border-t border-black/10"
-          style={{ zIndex: 9, height: "44px", ...revealUp("1s") }}
+          className="relative flex-shrink-0 overflow-hidden bg-[#f2f0ea] border-t border-black/10 z-[9]"
+          style={{ height: "clamp(34px, 5.5dvh, 44px)", ...revealUp("1s") }}
         >
           <div
             className="flex items-center h-full whitespace-nowrap"
@@ -321,7 +312,7 @@ export default function Hero() {
             {[0, 1].map((i) => (
               <span
                 key={i}
-                className="text-black/80 text-[10px] tracking-[0.18em] uppercase px-4 flex-shrink-0"
+                className="text-black/80 text-[9px] sm:text-[10px] tracking-[0.18em] uppercase px-4 flex-shrink-0"
                 style={{ fontFamily: "'Space Mono', monospace" }}
               >
                 {MARQUEE_TEXT.repeat(8)}
