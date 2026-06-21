@@ -22,16 +22,23 @@
  *   <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet" />
  *
  * CHANGES IN THIS VERSION (vs. previous):
- *   1. Globe now spins as part of the actual image (a circular crop of
- *      the same source photo, scaled + positioned to isolate the globe
- *      region) rather than a floating decorative ring — see inline
- *      comment at the globe overlay for exact values and how to nudge
- *      them if misaligned.
- *   2. Figure raised higher in frame (top-[-2%], wider box at 70vw) so
+ *   1. The spinning globe now renders from a SEPARATE, standalone globe
+ *      image (GLOBE_IMAGE_URL) instead of being cropped out of the
+ *      combined figure photo. The crop approach kept landing on the
+ *      jacket/shoulder because it relied on coordinates reverse-
+ *      engineered from screenshots, never the raw file. A dedicated
+ *      asset removes that failure mode entirely — no crop math at all.
+ *   2. A solid background-color "patch" sits behind the spinning globe
+ *      to cover the STATIC globe still drawn into the base figure
+ *      photo (it's part of that single composite image and can't be
+ *      removed from it) — without this, you'd see two globes layered:
+ *      the static original underneath, slightly misaligned with the
+ *      new spinning one on top.
+ *   3. Figure raised higher in frame (top-[-2%], wider box at 70vw) so
  *      it reads larger overall.
- *   3. The floating dashed "accent ring" near the headline has been
+ *   4. The floating dashed "accent ring" near the headline has been
  *      removed entirely.
- *   4. Headline font switched to Anton — heavier, more condensed, more
+ *   5. Headline font switched to Anton — heavier, more condensed, more
  *      aggressive than Archivo Black, matching the BADMASH reference's
  *      letterform weight/shape (without the 3D metal/fire treatment).
  *
@@ -47,6 +54,13 @@ import Image from "next/image";
 
 const IMAGE_URL =
   "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1781999577/1781997692098_aawdh2.png";
+
+// Standalone globe-only asset — eliminates all crop/coordinate guessing
+// for the spinning overlay. This is the globe by itself (Image 1 you
+// uploaded), so the overlay just renders it directly with object-fit:
+// contain — no scale(), no objectPosition math, nothing to misalign.
+const GLOBE_IMAGE_URL =
+  "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1782016036/1782004090347_dxiz2m.png";
 
 const ACCENT = "linear-gradient(110deg,#7c6cf0 0%,#a78bfa 50%,#d8b4fe 100%)";
 
@@ -165,30 +179,29 @@ export default function Hero() {
         </div>
 
         {/* ══════════════════════════════════════════════════════════
-            SPINNING GLOBE OVERLAY — STANDALONE, ANCHORED TO SECTION
-            (not nested inside the figure box anymore).
+            SPINNING GLOBE OVERLAY — STANDALONE ASSET
 
-            WHY THIS CHANGED: the previous version nested this inside
-            the figure's box and used percentages relative to that box.
-            But that box (because of object-fit:contain + a "-2% top"
-            offset) has a lot of invisible empty space above the actual
-            artwork — so percentages measured against the visible image
-            in a screenshot didn't match percentages of the true box.
-            That's why it drifted up into empty space above the
-            headline.
+            This now renders the dedicated globe-only image (uploaded
+            separately, see GLOBE_IMAGE_URL) instead of trying to crop
+            a circular window out of the combined figure photo. That
+            crop approach failed repeatedly because every measurement
+            had to be reverse-engineered from phone screenshots of the
+            already-rendered page — never the raw file — so small
+            framing differences kept landing the window on the jacket/
+            shoulder instead of the globe.
 
-            THIS VERSION instead positions directly against the
-            <section> (the full hero viewport), using values tuned
-            from your actual screenshot at 720px width. All 4 tuning
-            numbers are collected in ONE place below — if it's still
-            off, change ONLY these four lines (not the JSX):
+            With a standalone globe asset, there is no crop math at
+            all: object-fit:contain just renders the whole globe image
+            inside the circle, guaranteed correct every time.
+
+            Only 3 values left to tune — position/size of the circle
+            on screen (NOT what's inside it, that's now automatic):
         ══════════════════════════════════════════════════════════ */}
         {(() => {
-          // ── TUNE THESE FOUR VALUES ONLY ──────────────────────────
+          // ── TUNE THESE THREE VALUES ONLY ─────────────────────────
           const GLOBE_LEFT = "37.5%";   // distance from left edge of viewport
           const GLOBE_TOP = "70.7%";    // distance from top edge of viewport
           const GLOBE_SIZE = "19.5vw";  // diameter of the circle
-          const GLOBE_ZOOM = 3.5;       // how zoomed-in the image is inside the circle
           // ──────────────────────────────────────────────────────────
           return (
             <div
@@ -204,22 +217,31 @@ export default function Hero() {
                 transition: "opacity 1s ease 0.5s",
               }}
             >
+              {/* Patch behind the spinning globe — covers the STATIC
+                  globe baked into the base figure photo underneath, so
+                  only the new spinning one is visible. Slightly larger
+                  than the globe itself (110%) and same background color
+                  as the section, so the edge blends invisibly. */}
+              <div
+                className="absolute rounded-full"
+                style={{
+                  inset: "-5%",
+                  background: "#f2f0ea",
+                  zIndex: 0,
+                }}
+              />
               <div
                 ref={globeRef}
-                className="relative w-full h-full rounded-full overflow-hidden"
-                style={{ animation: "globe-spin 13s linear infinite" }}
+                className="relative w-full h-full"
+                style={{ animation: "globe-spin 13s linear infinite", zIndex: 1 }}
               >
                 <Image
-                  src={IMAGE_URL}
+                  src={GLOBE_IMAGE_URL}
                   alt=""
                   aria-hidden="true"
                   fill
                   sizes="20vw"
-                  style={{
-                    objectFit: "cover",
-                    objectPosition: "21% 64%",
-                    transform: `scale(${GLOBE_ZOOM})`,
-                  }}
+                  style={{ objectFit: "contain" }}
                 />
               </div>
             </div>
