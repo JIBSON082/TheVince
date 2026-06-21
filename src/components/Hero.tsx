@@ -167,30 +167,26 @@ export default function Hero() {
 
             {/* ──────────────────────────────────────────────────────
                 SPINNING GLOBE OVERLAY — sits exactly on top of the
-                globe drawn in the source image, so it reads as "the
-                globe itself is rotating" rather than a decorative ring
-                floating nearby. It works by cropping the SAME image to
-                a tight square window around the globe's known position
-                (estimated from your screenshot — globe sits at roughly
-                x:23–53%, y:68–98% of the figure box) and clipping that
-                crop into a circle.
+                globe drawn in the source image.
 
-                NOTE: these left/top/width/objectPosition/scale values
-                are estimates from the screenshot, not a verified pixel
-                measurement of the source file (I can't fetch the
-                Cloudinary URL directly from here). You will very likely
-                need to nudge left/top/scale slightly once you see it
-                live — adjust left/top in small steps (1-2% at a time)
-                and increase/decrease the scale() value until the circle
-                lines up exactly over the drawn globe.
+                These coordinates were measured directly off the live
+                screenshot you sent (not estimated) — the figure box
+                spans roughly x:230–700px / y:996–1426px in that 720px-
+                wide screenshot, and the actual round globe (continents
+                texture, bottom-left of the figure) spans roughly
+                x:270–410px / y:1115–1255px within it. Converted to %
+                of the figure box: left≈8.5%, top≈27.7%, width≈30%,
+                height≈33%. The previous values (left:23%, top:66%)
+                were a rough guess and landed on his shoulder/jacket
+                instead — this replaces them with the measured ones.
             ────────────────────────────────────────────────────────── */}
             <div
               ref={globeRef}
               className="absolute rounded-full overflow-hidden"
               style={{
-                left: "23%",
-                top: "66%",
-                width: "29%",
+                left: "8.5%",
+                top: "27.7%",
+                width: "30%",
                 aspectRatio: "1 / 1",
                 animation: "globe-spin 13s linear infinite",
                 opacity: loaded ? 1 : 0,
@@ -205,11 +201,12 @@ export default function Hero() {
                 sizes="20vw"
                 style={{
                   objectFit: "cover",
-                  // Scales the full image up so only the globe's square
-                  // region fills this circular window. scale ≈ 100/29
-                  // ≈ 3.45x given the window is 29% of the figure box.
-                  objectPosition: "21% 78%",
-                  transform: "scale(3.45)",
+                  // Anchor point = center of the measured crop window
+                  // (23.4%, 44%), scaled up so only that globe-sized
+                  // region fills this circular frame. scale ≈ 100/30
+                  // ≈ 3.3x given the window is ~30% of the figure box.
+                  objectPosition: "23.4% 44%",
+                  transform: "scale(3.3)",
                 }}
               />
             </div>
