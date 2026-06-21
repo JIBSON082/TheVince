@@ -5,76 +5,63 @@
  * ─────────────────────────────────────────────────────────────────────
  * Pure black & white halftone composition. No gradient wash, no duotone.
  *
+ * REQUIRED: this version uses the "Anton" Google Font for the headline
+ * (a heavy condensed display face — closest free match to the BADMASH
+ * reference's letterform shape, used WITHOUT the metallic/fire effect
+ * per direction: shape only, kept flat to match the halftone figure).
+ * Add it via next/font in your layout, e.g.:
+ *
+ *   import { Anton } from 'next/font/google';
+ *   const anton = Anton({ weight: '400', subsets: ['latin'], variable: '--font-anton' });
+ *
+ * ...and apply `anton.variable` to your root layout's className, OR
+ * simplest for GitHub-mobile-only editing: add this line inside the
+ * <head> of your root layout.tsx:
+ *
+ *   <link rel="preconnect" href="https://fonts.googleapis.com" />
+ *   <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet" />
+ *
+ * CHANGES IN THIS VERSION (vs. previous):
+ *   1. The spinning globe now renders from a SEPARATE, standalone globe
+ *      image (GLOBE_IMAGE_URL) instead of being cropped out of the
+ *      combined figure photo. The crop approach kept landing on the
+ *      jacket/shoulder because it relied on coordinates reverse-
+ *      engineered from screenshots, never the raw file. A dedicated
+ *      asset removes that failure mode entirely — no crop math at all.
+ *   2. A solid background-color "patch" sits behind the spinning globe
+ *      to cover the STATIC globe still drawn into the base figure
+ *      photo (it's part of that single composite image and can't be
+ *      removed from it) — without this, you'd see two globes layered:
+ *      the static original underneath, slightly misaligned with the
+ *      new spinning one on top.
+ *   3. Figure raised higher in frame (top-[-2%], wider box at 70vw) so
+ *      it reads larger overall.
+ *   4. The floating dashed "accent ring" near the headline has been
+ *      removed entirely.
+ *   5. Headline font switched to Anton — heavier, more condensed, more
+ *      aggressive than Archivo Black, matching the BADMASH reference's
+ *      letterform weight/shape (without the 3D metal/fire treatment).
+ *
  * Layout:
- *   Left ~42%  → typography zone ("ART DIRECTOR" / "OF THE STREETS")
- *   Right ~64% → figure (horizontally cropped source), bleeding off
- *                the right edge
- *
- * The source image is square, but the figure's body and the globe
- * both sit left-of-center within it. A horizontal crop (see CROP_BOX)
- * is applied so that, once the figure box is positioned at 64vw wide
- * anchored right, the globe's left edge naturally lands right at the
- * typography zone's boundary — without that crop, the geometry can't
- * satisfy "figure occupies ~62% of frame" and "globe touches the type
- * zone" at the same time (verified by direct calculation).
- *
- * Key detail: the globe sits at z5 — above the figure (z2) and above
- * the headline (z3) — so it visually interrupts "OF THE STREETS"
- * exactly where the two overlap.
- *
- * The globe gets independent motion via a masked clone technique:
- * a second copy of the same image, clipped to a circle around the
- * globe's known position (GLOBE_CLIP, measured by pixel analysis),
- * is given its own slow rotation — so it reads as "spinning" while
- * the rest of the figure stays static.
- *
- * Bottom chrome: infinite marquee strip, fully separated from the
- * headline (no overlap with the main composition).
+ *   Left zone  → typography ("ART DIRECTOR" / "OF THE STREETS")
+ *   Right zone → figure, natural aspect ratio, bottom-anchored, can
+ *                bleed off the right edge on wide viewports
  * ─────────────────────────────────────────────────────────────────────
  */
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 
-// ── Source image ────────────────────────────────────────────────────
 const IMAGE_URL =
   "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1781999577/1781997692098_aawdh2.png";
 
-// ── Crop applied to the figure box ──────────────────────────────────
-// The source is a square (1024×1024) image, but the man's body only
-// occupies x[23.3–75.2]% of it, and the globe sits further left at
-// x[12.5–32.6]%. To satisfy "globe touches the type-zone boundary"
-// AND "figure occupies the right 60–65%" simultaneously, the figure
-// box uses a horizontal crop (not the full square) — keeping full
-// height, cropped to x[11–76.7]% — which pulls the globe's left edge
-// to sit right at the type zone boundary once the box is positioned.
-const CROP_BOX = {
-  aspect: 0.6570, // width/height of the cropped frame
-  bgSizeW: 152.21,
-  bgSizeH: 100,
-  bgPosX: 32.07,
-  bgPosY: 0,
-};
+// Standalone globe-only asset — eliminates all crop/coordinate guessing
+// for the spinning overlay. This is the globe by itself (Image 1 you
+// uploaded), so the overlay just renders it directly with object-fit:
+// contain — no scale(), no objectPosition math, nothing to misalign.
+const GLOBE_IMAGE_URL =
+  "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1782016036/1782004090347_dxiz2m.png";
 
-// ── Globe position — relative to the CROPPED figure box ─────────────
-// The clip window is sized by HEIGHT only (29.4% of box height, which
-// is correct since the crop never touched the vertical axis) with
-// aspectRatio:1/1 forcing width to match in rendered pixels. This is
-// required because the crop box itself isn't square (aspect 0.657),
-// so using independent width%/height% would render an ellipse, not
-// a circle — caught and fixed before shipping.
-const GLOBE_CLIP = {
-  top: "22.5%",
-  left: "-4.79%",
-  height: "29.4%",
-  // backgroundSize/Position reference the ORIGINAL full image (the
-  // clone's background-image is the untouched source url), recomputed
-  // for a true circular window centered on the globe.
-  bgSize: 340.14,
-  bgPosX: 11.12,
-  bgPosY: 31.87,
-};
-
-// ── Single accent dot gradient (kept from existing pattern) ─────────
 const ACCENT = "linear-gradient(110deg,#7c6cf0 0%,#a78bfa 50%,#d8b4fe 100%)";
 
 const MARQUEE_TEXT =
@@ -82,22 +69,20 @@ const MARQUEE_TEXT =
 
 export default function Hero() {
   const [loaded, setLoaded] = useState(false);
-  const globeWrapRef = useRef<HTMLDivElement>(null);
+  const globeRef = useRef<HTMLDivElement>(null);
 
-  const handleImageReady = () => setLoaded(true);
-
-  // ── Subtle mouse-parallax on the globe clone only ──────────────────
-  // Figure + headline stay completely static, per spec.
+  // Subtle mouse-parallax on the globe accent only — figure + headline
+  // stay completely static.
   useEffect(() => {
-    const MAX = 10;
+    const MAX = 8;
     const onMove = (e: MouseEvent) => {
-      if (!globeWrapRef.current) return;
+      if (!globeRef.current) return;
       const dx =
         ((e.clientX - window.innerWidth / 2) / (window.innerWidth / 2)) * MAX;
       const dy =
         ((e.clientY - window.innerHeight / 2) / (window.innerHeight / 2)) * MAX;
-      globeWrapRef.current.style.setProperty("--parallax-x", `${dx}px`);
-      globeWrapRef.current.style.setProperty("--parallax-y", `${dy}px`);
+      globeRef.current.style.setProperty("--px", `${dx}px`);
+      globeRef.current.style.setProperty("--py", `${dy}px`);
     };
     window.addEventListener("mousemove", onMove);
     return () => window.removeEventListener("mousemove", onMove);
@@ -118,8 +103,8 @@ export default function Hero() {
     <>
       <style>{`
         @keyframes globe-spin {
-          0%   { transform: translate(var(--parallax-x,0), var(--parallax-y,0)) rotate(0deg); }
-          100% { transform: translate(var(--parallax-x,0), var(--parallax-y,0)) rotate(360deg); }
+          0%   { transform: translate(var(--px,0), var(--py,0)) rotate(0deg); }
+          100% { transform: translate(var(--px,0), var(--py,0)) rotate(360deg); }
         }
         @keyframes marquee-scroll {
           from { transform: translateX(0); }
@@ -135,151 +120,6 @@ export default function Hero() {
         className="relative w-full overflow-hidden bg-[#f2f0ea]"
         style={{ height: "100dvh", minHeight: "640px" }}
       >
-        {/* ══════════════════════════════════════════════════════════
-            FIGURE — width-driven box at 64vw, height follows from a
-            horizontal crop of the source (x:11–76.7%, full height).
-            This crop pulls the globe leftward within its own box just
-            enough that, once positioned, its left edge reaches the
-            typography zone boundary — see CROP_BOX comment above.
-        ══════════════════════════════════════════════════════════ */}
-        <div
-          className="absolute top-0 right-0 bottom-0 flex items-end justify-end"
-          style={{
-            zIndex: 2,
-            opacity: loaded ? 1 : 0,
-            transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.15s",
-          }}
-        >
-          {/* Width = max(64vw, height-driven width) — guarantees the box
-              always fills the full section height even on narrow/tall
-              viewports (mobile portrait, tablet), where 64vw alone would
-              leave a visible gap above the figure. On wide viewports,
-              64vw wins and the box overflows height (cropped at top by
-              the section's overflow:hidden) — the intended bleed look. */}
-          <div
-            className="relative"
-            style={{
-              width: `max(64vw, calc(100dvh * ${CROP_BOX.aspect}))`,
-              aspectRatio: CROP_BOX.aspect,
-              transform: "translateX(3%)",
-              backgroundImage: `url(${IMAGE_URL})`,
-              backgroundRepeat: "no-repeat",
-              backgroundSize: `${CROP_BOX.bgSizeW}% ${CROP_BOX.bgSizeH}%`,
-              backgroundPosition: `${CROP_BOX.bgPosX}% ${CROP_BOX.bgPosY}%`,
-            }}
-            role="img"
-            aria-label="The VINCE — illustrated figure holding a globe and a card reading VINCE"
-          />
-          {/* Hidden native img — hooks onLoad/onError for the reveal sequence */}
-          <img
-            src={IMAGE_URL}
-            alt=""
-            aria-hidden="true"
-            className="absolute w-px h-px opacity-0 pointer-events-none"
-            onLoad={handleImageReady}
-            onError={handleImageReady}
-          />
-        </div>
-
-        {/* ══════════════════════════════════════════════════════════
-            GLOBE CLONE — masked, independently spinning layer.
-            Lives inside a box identical to the figure's (same crop,
-            same width, same translateX), so GLOBE_CLIP percentages
-            map exactly onto the figure's globe with no drift.
-            Sits at z5 — above the figure (z2) and the headline (z3) —
-            which is what makes it visually "interrupt" the second line.
-        ══════════════════════════════════════════════════════════ */}
-        <div
-          aria-hidden="true"
-          className="absolute top-0 right-0 bottom-0 flex items-end justify-end pointer-events-none"
-          style={{
-            zIndex: 5,
-            opacity: loaded ? 1 : 0,
-            transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.3s",
-          }}
-        >
-          {/* Identical box to the figure above — same width, same aspect
-              ratio, same translateX — so GLOBE_CLIP percentages (measured
-              against this cropped frame) line up exactly. */}
-          <div
-            className="relative"
-            style={{
-              width: `max(64vw, calc(100dvh * ${CROP_BOX.aspect}))`,
-              aspectRatio: CROP_BOX.aspect,
-              transform: "translateX(3%)",
-            }}
-          >
-            {/* Circular clip window — height-driven + aspectRatio:1/1
-                guarantees a TRUE circle (not an ellipse) regardless of
-                the parent box's own aspect ratio. */}
-            <div
-              ref={globeWrapRef}
-              className="absolute rounded-full"
-              style={{
-                top: GLOBE_CLIP.top,
-                left: GLOBE_CLIP.left,
-                height: GLOBE_CLIP.height,
-                width: "auto",
-                aspectRatio: "1 / 1",
-                backgroundImage: `url(${IMAGE_URL})`,
-                backgroundRepeat: "no-repeat",
-                backgroundSize: `${GLOBE_CLIP.bgSize}% ${GLOBE_CLIP.bgSize}%`,
-                backgroundPosition: `${GLOBE_CLIP.bgPosX}% ${GLOBE_CLIP.bgPosY}%`,
-                animation: "globe-spin 14s linear infinite",
-              }}
-            />
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════════════════════
-            TYPOGRAPHY ZONE — left ~38–40%
-            Two stacked lines. The globe clone (z5) sits above this
-            zone's z-index (z3) only where it physically overlaps —
-            its left edge lands right at this zone's right boundary,
-            so it reads as cutting into "OF THE STREETS".
-        ══════════════════════════════════════════════════════════ */}
-        <div
-          className="absolute top-0 left-0 bottom-0 flex flex-col justify-center"
-          style={{ width: "42%", zIndex: 3, paddingLeft: "5%", paddingRight: "2%" }}
-        >
-          <h1
-            className="text-black uppercase"
-            style={{
-              fontFamily: "'Archivo Black', sans-serif",
-              fontSize: "clamp(34px, 7.4vw, 92px)",
-              lineHeight: 0.92,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            <span
-              className="block"
-              style={{
-                opacity: loaded ? 1 : 0,
-                transform: loaded ? "translateY(0)" : "translateY(18px)",
-                transition: "opacity 0.8s cubic-bezier(0.16,1,0.3,1) 0.45s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.45s",
-              }}
-            >
-              ART
-              <br />
-              DIRECTOR
-            </span>
-
-            {/* "OF THE STREETS" — sits at z3, globe clone is z5 above it */}
-            <span
-              className="block"
-              style={{
-                opacity: loaded ? 1 : 0,
-                transform: loaded ? "translateY(0)" : "translateY(18px)",
-                transition: "opacity 0.8s cubic-bezier(0.16,1,0.3,1) 0.6s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.6s",
-              }}
-            >
-              OF THE
-              <br />
-              STREETS
-            </span>
-          </h1>
-        </div>
-
         {/* ══════════════════════════════════════════════════════════
             TOP BAR
         ══════════════════════════════════════════════════════════ */}
@@ -309,17 +149,171 @@ export default function Hero() {
         </header>
 
         {/* ══════════════════════════════════════════════════════════
-            BOTTOM MARQUEE — fully separated from headline/figure
+            FIGURE — natural aspect ratio, bottom + right anchored.
+            object-fit: contain means NOTHING is cropped or stretched.
+        ══════════════════════════════════════════════════════════ */}
+        <div
+          className="absolute top-[-2%] right-0 bottom-0 flex items-end justify-end"
+          style={{
+            zIndex: 2,
+            width: "min(70vw, 100%)",
+            opacity: loaded ? 1 : 0,
+            transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.15s",
+          }}
+        >
+          <div
+            className="relative w-full h-full"
+            style={{ transform: "translateX(4%)" }}
+          >
+            <Image
+              src={IMAGE_URL}
+              alt="The VINCE — illustrated figure holding a globe and a card reading VINCE"
+              fill
+              priority
+              sizes="(max-width: 768px) 100vw, 70vw"
+              style={{ objectFit: "contain", objectPosition: "right bottom" }}
+              onLoad={() => setLoaded(true)}
+              onError={() => setLoaded(true)}
+            />
+          </div>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            SPINNING GLOBE OVERLAY — STANDALONE ASSET
+
+            This now renders the dedicated globe-only image (uploaded
+            separately, see GLOBE_IMAGE_URL) instead of trying to crop
+            a circular window out of the combined figure photo. That
+            crop approach failed repeatedly because every measurement
+            had to be reverse-engineered from phone screenshots of the
+            already-rendered page — never the raw file — so small
+            framing differences kept landing the window on the jacket/
+            shoulder instead of the globe.
+
+            With a standalone globe asset, there is no crop math at
+            all: object-fit:contain just renders the whole globe image
+            inside the circle, guaranteed correct every time.
+
+            Only 3 values left to tune — position/size of the circle
+            on screen (NOT what's inside it, that's now automatic):
+        ══════════════════════════════════════════════════════════ */}
+        {(() => {
+          // ── TUNE THESE THREE VALUES ONLY ─────────────────────────
+          const GLOBE_LEFT = "37.5%";   // distance from left edge of viewport
+          const GLOBE_TOP = "70.7%";    // distance from top edge of viewport
+          const GLOBE_SIZE = "19.5vw";  // diameter of the circle
+          // ──────────────────────────────────────────────────────────
+          return (
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                zIndex: 6,
+                left: GLOBE_LEFT,
+                top: GLOBE_TOP,
+                width: GLOBE_SIZE,
+                maxWidth: "170px",
+                aspectRatio: "1 / 1",
+                opacity: loaded ? 1 : 0,
+                transition: "opacity 1s ease 0.5s",
+              }}
+            >
+              {/* Patch behind the spinning globe — covers the STATIC
+                  globe baked into the base figure photo underneath, so
+                  only the new spinning one is visible. Slightly larger
+                  than the globe itself (110%) and same background color
+                  as the section, so the edge blends invisibly. */}
+              <div
+                className="absolute rounded-full"
+                style={{
+                  inset: "-5%",
+                  background: "#f2f0ea",
+                  zIndex: 0,
+                }}
+              />
+              <div
+                ref={globeRef}
+                className="relative w-full h-full"
+                style={{ animation: "globe-spin 13s linear infinite", zIndex: 1 }}
+              >
+                <Image
+                  src={GLOBE_IMAGE_URL}
+                  alt=""
+                  aria-hidden="true"
+                  fill
+                  sizes="20vw"
+                  style={{ objectFit: "contain" }}
+                />
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════════════════
+            TYPOGRAPHY ZONE
+            min(44vw, 560px) with a hard floor (280px) guarantees this
+            zone — and therefore the headline inside it — never gets
+            squeezed to nothing on narrow viewports. Anton is a
+            condensed face (narrower per-character than Archivo Black),
+            so the clamp() max (104px) leaves comfortable margin for
+            "DIRECTOR" even at the zone's minimum width.
+        ══════════════════════════════════════════════════════════ */}
+        <div
+          className="absolute top-0 left-0 bottom-0 flex flex-col justify-center"
+          style={{
+            width: "min(44vw, 560px)",
+            minWidth: "280px",
+            zIndex: 3,
+            paddingLeft: "5.5%",
+            paddingRight: "4%",
+          }}
+        >
+          <h1
+            className="text-black uppercase"
+            style={{
+              fontFamily: "'Anton', 'Archivo Black', sans-serif",
+              fontWeight: 400,
+              fontSize: "clamp(40px, 9.5vw, 104px)",
+              lineHeight: 0.94,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            <span
+              className="block"
+              style={{
+                opacity: loaded ? 1 : 0,
+                transform: loaded ? "translateY(0)" : "translateY(18px)",
+                transition:
+                  "opacity 0.8s cubic-bezier(0.16,1,0.3,1) 0.45s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.45s",
+              }}
+            >
+              ART
+              <br />
+              DIRECTOR
+            </span>
+
+            <span
+              className="block mt-3"
+              style={{
+                opacity: loaded ? 1 : 0,
+                transform: loaded ? "translateY(0)" : "translateY(18px)",
+                transition:
+                  "opacity 0.8s cubic-bezier(0.16,1,0.3,1) 0.6s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.6s",
+              }}
+            >
+              OF THE
+              <br />
+              STREETS
+            </span>
+          </h1>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            BOTTOM MARQUEE
         ══════════════════════════════════════════════════════════ */}
         <div
           className="absolute left-0 right-0 bottom-0 overflow-hidden bg-[#f2f0ea] border-t border-black/10"
           style={{ zIndex: 9, height: "44px", ...revealUp("1s") }}
         >
-          {/* Two identical tracks, each repeated 8× — wide enough to
-              fully cover ultra-wide viewports (tested up to 2560px) with
-              no gap before the loop point. Animating to -50% slides
-              exactly one track's width, landing seamlessly on the
-              second copy's start. */}
           <div
             className="flex items-center h-full whitespace-nowrap"
             style={{ animation: "marquee-scroll 34s linear infinite" }}
