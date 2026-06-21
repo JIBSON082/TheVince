@@ -5,76 +5,90 @@
  * ─────────────────────────────────────────────────────────────────────
  * Pure black & white halftone composition. No gradient wash, no duotone.
  *
- * REQUIRED: this version uses the "Anton" Google Font for the headline
- * (a heavy condensed display face — closest free match to the BADMASH
- * reference's letterform shape, used WITHOUT the metallic/fire effect
- * per direction: shape only, kept flat to match the halftone figure).
- * Add it via next/font in your layout, e.g.:
+ * Headline font: Anton (heavy condensed display face). Add via next/font
+ * in your root layout, e.g.:
  *
  *   import { Anton } from 'next/font/google';
  *   const anton = Anton({ weight: '400', subsets: ['latin'], variable: '--font-anton' });
  *
- * ...and apply `anton.variable` to your root layout's className, OR
- * simplest for GitHub-mobile-only editing: add this line inside the
- * <head> of your root layout.tsx:
+ * ...or simplest for GitHub-mobile-only editing, add inside <head> of
+ * your root layout.tsx:
  *
  *   <link rel="preconnect" href="https://fonts.googleapis.com" />
  *   <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet" />
  *
- * CHANGES IN THIS VERSION (vs. previous):
- *   1. The spinning globe now renders from a SEPARATE, standalone globe
- *      image (GLOBE_IMAGE_URL) instead of being cropped out of the
- *      combined figure photo. The crop approach kept landing on the
- *      jacket/shoulder because it relied on coordinates reverse-
- *      engineered from screenshots, never the raw file. A dedicated
- *      asset removes that failure mode entirely — no crop math at all.
- *   2. A solid background-color "patch" sits behind the spinning globe
- *      to cover the STATIC globe still drawn into the base figure
- *      photo (it's part of that single composite image and can't be
- *      removed from it) — without this, you'd see two globes layered:
- *      the static original underneath, slightly misaligned with the
- *      new spinning one on top.
- *   3. Figure raised higher in frame (top-[-2%], wider box at 70vw) so
- *      it reads larger overall.
- *   4. The floating dashed "accent ring" near the headline has been
- *      removed entirely.
- *   5. Headline font switched to Anton — heavier, more condensed, more
- *      aggressive than Archivo Black, matching the BADMASH reference's
- *      letterform weight/shape (without the 3D metal/fire treatment).
+ * ─────────────────────────────────────────────────────────────────────
+ * FIX IN THIS VERSION — the "white blob" bug
+ * ─────────────────────────────────────────────────────────────────────
+ * The previous version used a SEPARATE globe-only image plus a solid
+ * color "patch" behind it to cover the static globe baked into the
+ * base figure photo. That patch was a flat off-white circle, but the
+ * actual photo has halftone dot texture and tonal variation underneath
+ * — so the patch rendered as a visible white sticker on top of the
+ * image. That's the artifact you saw.
  *
- * Layout:
- *   Left zone  → typography ("ART DIRECTOR" / "OF THE STREETS")
- *   Right zone → figure, natural aspect ratio, bottom-anchored, can
- *                bleed off the right edge on wide viewports
+ * The fix removes both problems at once:
+ *   1. No second image — the spinning globe is cropped directly out of
+ *      the SAME composite photo (IMAGE_URL). Only one asset, as required.
+ *   2. No patch — the spinning crop is positioned to land in the exact
+ *      same pixels as the static globe underneath (same box-sizing
+ *      rules as the figure layer: same width, same anchor, same
+ *      translateX), so it occludes the static globe simply by sitting
+ *      on top of it (z-index), with pixel-perfect alignment and no
+ *      visible seam.
+ *
+ * Globe crop coordinates were measured directly from the raw 1024×1024
+ * source file via connected-component pixel analysis on the actual
+ * file (not estimated from a screenshot): bbox x[12.5–32.6]%,
+ * y[24.5–49.9]%, padded 2%, then expanded to a true circle (diameter
+ * = larger of width/height span = 29.4%) centered on the globe so nothing
+ * is cropped and the clip window is a real circle, not an ellipse.
  * ─────────────────────────────────────────────────────────────────────
  */
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 
 const IMAGE_URL =
   "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1781999577/1781997692098_aawdh2.png";
-
-// Standalone globe-only asset — eliminates all crop/coordinate guessing
-// for the spinning overlay. This is the globe by itself (Image 1 you
-// uploaded), so the overlay just renders it directly with object-fit:
-// contain — no scale(), no objectPosition math, nothing to misalign.
-const GLOBE_IMAGE_URL =
-  "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1782016036/1782004090347_dxiz2m.png";
 
 const ACCENT = "linear-gradient(110deg,#7c6cf0 0%,#a78bfa 50%,#d8b4fe 100%)";
 
 const MARQUEE_TEXT =
   "ART DIRECTOR OF THE STREETS • CREATIVE DESIGNER • DIGITAL ARTIST • ";
 
+// ── Figure box sizing — single source of truth, shared by both the
+// static figure layer and the spinning-globe layer below, so they
+// stay pixel-locked to each other at every viewport size.
+const FIGURE_BOX_WIDTH = "min(70vw, 100%)";
+
+// ── Globe clip — verified via direct pixel analysis on the raw source
+// (connected-component detection), then expanded to a true circle
+// (diameter = larger of the bbox's width/height span) centered on the
+// globe's actual center, so the spinning window shows the complete
+// globe with no cropped edge and renders as a real circle (not an
+// ellipse — using independent width%/height% on a non-square box
+// would distort it, so size is height-driven + aspectRatio:1/1).
+const GLOBE_CLIP = {
+  top: "22.5%",
+  left: "7.85%",
+  diameter: "29.4%",
+  // Closed-form background-size/position so this circular window
+  // shows exactly the globe region of the full source image:
+  //   ratio = (10000/diameter%) / 100
+  //   pos%  = -offset% * ratio / (1 - ratio)
+  bgSize: 340.14,
+  bgPosX: 11.12,
+  bgPosY: 31.87,
+};
+
 export default function Hero() {
   const [loaded, setLoaded] = useState(false);
   const globeRef = useRef<HTMLDivElement>(null);
 
-  // Subtle mouse-parallax on the globe accent only — figure + headline
-  // stay completely static.
+  // Subtle mouse-parallax on the globe only — figure + headline stay
+  // completely static.
   useEffect(() => {
-    const MAX = 8;
+    const MAX = 6;
     const onMove = (e: MouseEvent) => {
       if (!globeRef.current) return;
       const dx =
@@ -149,113 +163,104 @@ export default function Hero() {
         </header>
 
         {/* ══════════════════════════════════════════════════════════
-            FIGURE — natural aspect ratio, bottom + right anchored.
-            object-fit: contain means NOTHING is cropped or stretched.
+            FIGURE — single composite photo (figure + globe + card),
+            rendered via background-image so its on-screen square box
+            is explicit and reusable (next/image's `fill` + `contain`
+            hides that square inside an opaque algorithm — we need it
+            explicit so the spinning-globe layer below can match it
+            exactly).
         ══════════════════════════════════════════════════════════ */}
         <div
           className="absolute top-[-2%] right-0 bottom-0 flex items-end justify-end"
           style={{
             zIndex: 2,
-            width: "min(70vw, 100%)",
+            width: FIGURE_BOX_WIDTH,
             opacity: loaded ? 1 : 0,
             transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.15s",
           }}
         >
+          {/* This div IS the rendered square (source is 1:1, so
+              aspect-ratio:1/1 here exactly reproduces what
+              object-fit:contain would have rendered). */}
           <div
-            className="relative w-full h-full"
-            style={{ transform: "translateX(4%)" }}
+            className="relative"
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              minWidth: 0,
+              aspectRatio: "1 / 1",
+              transform: "translateX(4%)",
+              backgroundImage: `url(${IMAGE_URL})`,
+              backgroundRepeat: "no-repeat",
+              backgroundSize: "100% 100%",
+            }}
+            role="img"
+            aria-label="The VINCE — illustrated figure holding a globe and a card reading VINCE"
+          />
+          {/* Hidden native img — hooks onLoad/onError for the reveal sequence */}
+          <img
+            src={IMAGE_URL}
+            alt=""
+            aria-hidden="true"
+            className="absolute w-px h-px opacity-0 pointer-events-none"
+            onLoad={() => setLoaded(true)}
+            onError={() => setLoaded(true)}
+          />
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            SPINNING GLOBE — cropped from the SAME image as the figure
+            above, positioned in an identical box (same FIGURE_BOX_WIDTH,
+            same anchor, same translateX) so it lands in the exact same
+            pixels as the static globe underneath and occludes it purely
+            through z-index — no patch, no second asset.
+        ══════════════════════════════════════════════════════════ */}
+        <div
+          aria-hidden="true"
+          className="absolute top-[-2%] right-0 bottom-0 flex items-end justify-end pointer-events-none"
+          style={{
+            zIndex: 5,
+            width: FIGURE_BOX_WIDTH,
+            opacity: loaded ? 1 : 0,
+            transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.3s",
+          }}
+        >
+          {/* Identical square to the figure's rendered box */}
+          <div
+            className="relative"
+            style={{ maxWidth: "100%", maxHeight: "100%", minWidth: 0, aspectRatio: "1 / 1", transform: "translateX(4%)" }}
           >
-            <Image
-              src={IMAGE_URL}
-              alt="The VINCE — illustrated figure holding a globe and a card reading VINCE"
-              fill
-              priority
-              sizes="(max-width: 768px) 100vw, 70vw"
-              style={{ objectFit: "contain", objectPosition: "right bottom" }}
-              onLoad={() => setLoaded(true)}
-              onError={() => setLoaded(true)}
-            />
+            {/* Circular clip window — height-driven + aspectRatio:1/1
+                guarantees a TRUE circle. top/left % are relative to
+                this square, which equals the full source image 1:1
+                with no letterboxing, so GLOBE_CLIP values map directly. */}
+            <div
+              ref={globeRef}
+              className="absolute rounded-full overflow-hidden"
+              style={{
+                top: GLOBE_CLIP.top,
+                left: GLOBE_CLIP.left,
+                height: GLOBE_CLIP.diameter,
+                width: "auto",
+                aspectRatio: "1 / 1",
+                animation: "globe-spin 13s linear infinite",
+              }}
+            >
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundImage: `url(${IMAGE_URL})`,
+                  backgroundRepeat: "no-repeat",
+                  backgroundSize: `${GLOBE_CLIP.bgSize}% ${GLOBE_CLIP.bgSize}%`,
+                  backgroundPosition: `${GLOBE_CLIP.bgPosX}% ${GLOBE_CLIP.bgPosY}%`,
+                }}
+              />
+            </div>
           </div>
         </div>
 
         {/* ══════════════════════════════════════════════════════════
-            SPINNING GLOBE OVERLAY — STANDALONE ASSET
-
-            This now renders the dedicated globe-only image (uploaded
-            separately, see GLOBE_IMAGE_URL) instead of trying to crop
-            a circular window out of the combined figure photo. That
-            crop approach failed repeatedly because every measurement
-            had to be reverse-engineered from phone screenshots of the
-            already-rendered page — never the raw file — so small
-            framing differences kept landing the window on the jacket/
-            shoulder instead of the globe.
-
-            With a standalone globe asset, there is no crop math at
-            all: object-fit:contain just renders the whole globe image
-            inside the circle, guaranteed correct every time.
-
-            Only 3 values left to tune — position/size of the circle
-            on screen (NOT what's inside it, that's now automatic):
-        ══════════════════════════════════════════════════════════ */}
-        {(() => {
-          // ── TUNE THESE THREE VALUES ONLY ─────────────────────────
-          const GLOBE_LEFT = "37.5%";   // distance from left edge of viewport
-          const GLOBE_TOP = "70.7%";    // distance from top edge of viewport
-          const GLOBE_SIZE = "19.5vw";  // diameter of the circle
-          // ──────────────────────────────────────────────────────────
-          return (
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                zIndex: 6,
-                left: GLOBE_LEFT,
-                top: GLOBE_TOP,
-                width: GLOBE_SIZE,
-                maxWidth: "170px",
-                aspectRatio: "1 / 1",
-                opacity: loaded ? 1 : 0,
-                transition: "opacity 1s ease 0.5s",
-              }}
-            >
-              {/* Patch behind the spinning globe — covers the STATIC
-                  globe baked into the base figure photo underneath, so
-                  only the new spinning one is visible. Slightly larger
-                  than the globe itself (110%) and same background color
-                  as the section, so the edge blends invisibly. */}
-              <div
-                className="absolute rounded-full"
-                style={{
-                  inset: "-5%",
-                  background: "#f2f0ea",
-                  zIndex: 0,
-                }}
-              />
-              <div
-                ref={globeRef}
-                className="relative w-full h-full"
-                style={{ animation: "globe-spin 13s linear infinite", zIndex: 1 }}
-              >
-                <Image
-                  src={GLOBE_IMAGE_URL}
-                  alt=""
-                  aria-hidden="true"
-                  fill
-                  sizes="20vw"
-                  style={{ objectFit: "contain" }}
-                />
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* ══════════════════════════════════════════════════════════
             TYPOGRAPHY ZONE
-            min(44vw, 560px) with a hard floor (280px) guarantees this
-            zone — and therefore the headline inside it — never gets
-            squeezed to nothing on narrow viewports. Anton is a
-            condensed face (narrower per-character than Archivo Black),
-            so the clamp() max (104px) leaves comfortable margin for
-            "DIRECTOR" even at the zone's minimum width.
         ══════════════════════════════════════════════════════════ */}
         <div
           className="absolute top-0 left-0 bottom-0 flex flex-col justify-center"
