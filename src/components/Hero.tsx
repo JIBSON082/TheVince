@@ -5,67 +5,34 @@
  * ─────────────────────────────────────────────────────────────────────
  * Pure black & white halftone composition. No gradient wash, no duotone.
  *
- * REQUIRED: this version uses the "Anton" Google Font for the headline.
- * Add it via next/font in your layout, e.g.:
- *
- *   import { Anton } from 'next/font/google';
- *   const anton = Anton({ weight: '400', subsets: ['latin'], variable: '--font-anton' });
- *
- * ...and apply `anton.variable` to your root layout's className, OR
- * simplest for GitHub-mobile-only editing: add this line inside the
- * <head> of your root layout.tsx:
+ * REQUIRED: Anton Google Font for the headline. Add to <head> in your
+ * root layout (RootLayout.tsx):
  *
  *   <link rel="preconnect" href="https://fonts.googleapis.com" />
  *   <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet" />
  *
- * CHANGES IN THIS VERSION:
- *   1. CLEAN GLOBE SWAP — the base figure photo (IMAGE_URL) is now the
- *      globe-ERASED version you provided. The globe is no longer
- *      cropped/patched/masked from anything — it's simply absent from
- *      the base photo, and the standalone globe image (GLOBE_IMAGE_URL)
- *      is positioned in the empty hand space and spun. No patches, no
- *      cover circles, no double-globe risk, because there's nothing
- *      left underneath to hide.
- *   2. THE ACTUAL ROOT-CAUSE FIX — every previous misalignment happened
- *      because the figure's box didn't have the same aspect ratio as
- *      the source photo. With object-fit:contain, if the box's shape
- *      doesn't match the image's shape, contain adds empty space on
- *      one side — so a percentage measured against the image file
- *      didn't equal that percentage of the box, and the gap between
- *      them changed with every screen size. This version locks the
- *      figure's box to aspectRatio: 1/1 (the source is exactly
- *      1024×1024), so the box and image always share the same shape —
- *      no empty space is ever added, and globe percentages measured
- *      from the source file (left≈18.8%, top≈50%, diameter≈19%) are
- *      correct at every screen size automatically.
- *   3. NO-SCROLL HERO — the section is locked to exactly 100dvh with
- *      internal flex sizing (not absolute-positioned guesswork) so
- *      header, figure+headline, and marquee all fit within one
- *      viewport on every device without the page scrolling.
- *   4. RESPONSIVE REWORK — below a width/height breakpoint (narrow
- *      phones in portrait, where 100dvh is tall and narrow), the
- *      layout drops from "headline beside figure" to a more compact
- *      proportion automatically via clamp()-driven sizing, instead of
- *      fixed vw units that could overflow on unusual aspect ratios
- *      (e.g. very short landscape phone browsers, very wide desktop
- *      monitors). Tested logic against: iPhone SE (375×667), iPhone 15
- *      Pro Max (430×932), common Android (360–412 wide), iPad portrait
- *      (768×1024), and desktop (1440+ wide).
- *
- * Layout:
- *   Left zone  → typography ("ART DIRECTOR" / "OF THE STREETS")
- *   Right zone → figure, natural aspect ratio, bottom-anchored
+ * ─────────────────────────────────────────────────────────────────────
+ * REBUILT FROM SCRATCH — simplified per direction:
+ *   1. ONE static image only (the original combined photo — man, globe,
+ *      and VINCE card all in one). No second globe asset, no spinning
+ *      crop, no rotation, no z-index layering tricks. The globe in the
+ *      photo is simply part of the picture, same as everything else.
+ *   2. STACKED LAYOUT — headline on top, image below it, matching the
+ *      reference layout exactly: not side-by-side, top-to-bottom.
+ *   3. NO SCROLL — section locked to 100dvh, real flex sizing (header
+ *      fixed height, body flex-1, marquee fixed height) so it always
+ *      fits exactly one screen.
+ *   4. Plain <img> tags (not next/image) with fully explicit sizing —
+ *      this was the fix for a real bug we hit earlier where ambiguous
+ *      sizing caused the image box to collapse to zero height on some
+ *      devices.
  * ─────────────────────────────────────────────────────────────────────
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 const IMAGE_URL =
-  "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1782017023/1782016885666_vwduyh.png";
-
-// Standalone globe-only asset, positioned in the now-empty hand.
-const GLOBE_IMAGE_URL =
-  "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1782016036/1782004090347_dxiz2m.png";
+  "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1781999577/1781997692098_aawdh2.png";
 
 const ACCENT = "linear-gradient(110deg,#7c6cf0 0%,#a78bfa 50%,#d8b4fe 100%)";
 
@@ -74,11 +41,10 @@ const MARQUEE_TEXT =
 
 export default function Hero() {
   const [loaded, setLoaded] = useState(false);
-  const globeRef = useRef<HTMLDivElement>(null);
 
-  // Safety net: reveal the page even if an image load/error event never
-  // fires for some reason (slow network, blocked request, etc.) — the
-  // page should never stay permanently invisible waiting on one image.
+  // Safety net: reveal the page even if the image load/error event
+  // never fires (slow network, blocked request) — the page should
+  // never stay permanently invisible waiting on one image.
   useEffect(() => {
     const t = setTimeout(() => setLoaded(true), 1200);
     return () => clearTimeout(t);
@@ -98,10 +64,6 @@ export default function Hero() {
   return (
     <>
       <style>{`
-        @keyframes globe-spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
         @keyframes marquee-scroll {
           from { transform: translateX(0); }
           to   { transform: translateX(-50%); }
@@ -150,23 +112,14 @@ export default function Hero() {
 
         {/* ══════════════════════════════════════════════════════════
             MAIN BODY — fills all remaining height between header and
-            marquee (flex: 1 1 auto). This is what guarantees no
-            scrolling: header + marquee are fixed-height, this region
-            absorbs whatever space is left on any device.
-
-            Below ~700px tall viewports (short phones in landscape, or
-            small phones with browser chrome eating vertical space),
-            it switches from "side-by-side" to "stacked, headline on
-            top" via the sm:flex-row / flex-col responsive classes —
-            otherwise the figure would get squeezed illegibly thin.
+            marquee. Stacked: headline first, image below, matching
+            the reference layout (not side-by-side).
         ══════════════════════════════════════════════════════════ */}
-        <div className="relative flex-1 min-h-0 flex flex-col sm:flex-row items-stretch">
-          {/* ── TYPOGRAPHY ZONE ──────────────────────────────────── */}
+        <div className="relative flex-1 min-h-0 flex flex-col">
+          {/* ── HEADLINE ──────────────────────────────────────────── */}
           <div
-            className="relative flex flex-col justify-center flex-shrink-0 z-[3] sm:w-[42%] sm:max-w-[560px]"
+            className="flex-shrink-0"
             style={{
-              width: "100%",
-              maxHeight: "46dvh",
               paddingLeft: "5.5%",
               paddingRight: "4%",
               paddingTop: "1.5dvh",
@@ -178,7 +131,7 @@ export default function Hero() {
               style={{
                 fontFamily: "'Anton', 'Archivo Black', sans-serif",
                 fontWeight: 400,
-                fontSize: "clamp(28px, min(7.5vw, 8.5dvh), 96px)",
+                fontSize: "clamp(28px, min(8.5vw, 6.5dvh), 80px)",
                 lineHeight: 0.94,
                 letterSpacing: "-0.01em",
               }}
@@ -198,7 +151,7 @@ export default function Hero() {
               </span>
 
               <span
-                className="block mt-2 sm:mt-3"
+                className="block mt-1 sm:mt-2"
                 style={{
                   opacity: loaded ? 1 : 0,
                   transform: loaded ? "translateY(0)" : "translateY(18px)",
@@ -213,88 +166,33 @@ export default function Hero() {
             </h1>
           </div>
 
-          {/* ── FIGURE + GLOBE ───────────────────────────────────────
-              This wrapper is the SHARED REFERENCE BOX for both the
-              figure image and the globe overlay below.
-
-              CRITICAL FIX: previous attempts kept misaligning because
-              object-fit:contain + objectPosition:"right bottom" does
-              NOT center the image in its box — it pins it to the
-              right/bottom edge, leaving empty space on whichever side
-              doesn't match the box's aspect ratio. That means a
-              percentage measured against the IMAGE doesn't equal the
-              same percentage of the BOX unless the box's aspect ratio
-              exactly equals the image's. This is why the globe kept
-              drifting between different screen sizes.
-
-              Fix: this inner box is locked to aspectRatio: 1/1 (the
-              source photo is exactly 1024×1024), so it always has the
-              SAME shape as the image — meaning object-fit:contain
-              never needs to add empty space on any side, and globe
-              percentages measured against the source file are now
-              always correct, at every screen size, automatically.
-          ─────────────────────────────────────────────────────────── */}
+          {/* ── IMAGE — fills remaining space below the headline,
+              single static photo, no rotation, no overlays. ────── */}
           <div
-            className="relative flex-1 min-h-0 z-[2] flex items-center justify-center sm:justify-end"
+            className="relative flex-1 min-h-0 flex items-end justify-end"
             style={{
+              paddingRight: "2%",
               opacity: loaded ? 1 : 0,
               transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.15s",
             }}
           >
-            <div
-              className="relative h-full"
-              style={{ aspectRatio: "1 / 1", maxWidth: "100%", minWidth: "1px" }}
-            >
+            <div className="relative w-full h-full">
               <img
                 src={IMAGE_URL}
-                alt="The VINCE — illustrated figure"
+                alt="The VINCE — illustrated figure holding a globe and a card reading VINCE"
                 onLoad={() => setLoaded(true)}
                 onError={() => setLoaded(true)}
                 style={{
                   position: "absolute",
-                  inset: 0,
+                  right: 0,
+                  bottom: 0,
                   width: "100%",
                   height: "100%",
                   objectFit: "contain",
+                  objectPosition: "right bottom",
                   display: "block",
                 }}
               />
-
-              {/* SPINNING GLOBE — positioned as % of THIS SAME BOX.
-                  Because the box above is locked to aspectRatio 1/1
-                  (matching the source photo exactly), these
-                  percentages — measured directly from the source file
-                  — are always accurate, regardless of screen size:
-                  empty hand center ≈ 18.8% from left / 50% from top,
-                  diameter ≈ 19% of box width. Plain <img> used here
-                  too (not next/image) for the same reason as above —
-                  guarantees real intrinsic sizing, nothing to collapse. */}
-              <div
-                ref={globeRef}
-                className="absolute rounded-full pointer-events-none overflow-hidden"
-                style={{
-                  left: "18.8%",
-                  top: "50%",
-                  width: "19%",
-                  aspectRatio: "1 / 1",
-                  transform: "translate(-50%, -50%)",
-                  animation: "globe-spin 13s linear infinite",
-                }}
-              >
-                <img
-                  src={GLOBE_IMAGE_URL}
-                  alt=""
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "contain",
-                    display: "block",
-                  }}
-                />
-              </div>
             </div>
           </div>
         </div>
