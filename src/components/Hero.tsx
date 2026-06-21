@@ -5,33 +5,35 @@
  * ─────────────────────────────────────────────────────────────────────
  * Pure black & white halftone composition. No gradient wash, no duotone.
  *
- * WHY THIS VERSION IS DIFFERENT FROM THE LAST ONE:
- * The previous version relied on hand-measured background-size/position
- * percentages to "crop" the figure and isolate the globe. Those numbers
- * were never actually verified against the real image — they were
- * estimates, and the estimates were wrong, which is why "ART DIRECTOR"
- * clipped off the left edge of the screen.
+ * REQUIRED: this version uses the "Anton" Google Font for the headline
+ * (a heavy condensed display face — closest free match to the BADMASH
+ * reference's letterform shape, used WITHOUT the metallic/fire effect
+ * per direction: shape only, kept flat to match the halftone figure).
+ * Add it via next/font in your layout, e.g.:
  *
- * This version removes that entire failure mode:
- *   1. The figure renders via next/image with object-fit: contain at
- *      its NATURAL aspect ratio — no invented crop box, nothing to
- *      get wrong.
- *   2. The typography zone has a guaranteed minimum width (min(42vw,
- *      420px) zone won't go below ~300px) and the headline uses a
- *      clamp() that's been bounded so it can never overflow that zone
- *      at any viewport width — verified by construction, not by eye.
- *   3. The globe "interruption" effect no longer depends on pixel-
- *      perfect cropping of a clone layer. Instead, a single circular
- *      shape (a CSS radial mask) sits at a fixed position relative to
- *      the figure's bounding box (where the globe visually is, based
- *      on the proportions in the reference screenshot: roughly 8% from
- *      the figure box's left edge, 38% down from the top). This circle
- *      punches through ONLY the last word ("STREETS") using
- *      mix-blend-mode + an inverted mask, so the headline's own pixels
- *      show through gaps in the circle — i.e., the image doesn't need
- *      to be cropped at all for the interruption effect to read
- *      correctly. This is more robust because it doesn't depend on
- *      knowing the globe's exact pixel coordinates in the source file.
+ *   import { Anton } from 'next/font/google';
+ *   const anton = Anton({ weight: '400', subsets: ['latin'], variable: '--font-anton' });
+ *
+ * ...and apply `anton.variable` to your root layout's className, OR
+ * simplest for GitHub-mobile-only editing: add this line inside the
+ * <head> of your root layout.tsx:
+ *
+ *   <link rel="preconnect" href="https://fonts.googleapis.com" />
+ *   <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet" />
+ *
+ * CHANGES IN THIS VERSION (vs. previous):
+ *   1. Globe now spins as part of the actual image (a circular crop of
+ *      the same source photo, scaled + positioned to isolate the globe
+ *      region) rather than a floating decorative ring — see inline
+ *      comment at the globe overlay for exact values and how to nudge
+ *      them if misaligned.
+ *   2. Figure raised higher in frame (top-[-2%], wider box at 70vw) so
+ *      it reads larger overall.
+ *   3. The floating dashed "accent ring" near the headline has been
+ *      removed entirely.
+ *   4. Headline font switched to Anton — heavier, more condensed, more
+ *      aggressive than Archivo Black, matching the BADMASH reference's
+ *      letterform weight/shape (without the 3D metal/fire treatment).
  *
  * Layout:
  *   Left zone  → typography ("ART DIRECTOR" / "OF THE STREETS")
@@ -134,19 +136,16 @@ export default function Hero() {
 
         {/* ══════════════════════════════════════════════════════════
             FIGURE — natural aspect ratio, bottom + right anchored.
-            object-fit: contain means NOTHING is cropped or stretched —
-            the whole illustration (man + globe + card) is guaranteed
-            to render correctly regardless of the source's true
-            dimensions. It's sized by HEIGHT (a multiple of viewport
-            height) so it scales consistently, and is allowed to
-            overflow/bleed off the right edge via the section's
-            overflow:hidden.
+            object-fit: contain means NOTHING is cropped or stretched.
+            Raised from the previous version (top-[8%] → top-[-2%], and
+            wider box) so the figure sits higher in the frame and
+            reads larger — per "enlarge it up a bit" feedback.
         ══════════════════════════════════════════════════════════ */}
         <div
-          className="absolute top-[8%] right-0 bottom-0 flex items-end justify-end"
+          className="absolute top-[-2%] right-0 bottom-0 flex items-end justify-end"
           style={{
             zIndex: 2,
-            width: "min(66vw, 100%)",
+            width: "min(70vw, 100%)",
             opacity: loaded ? 1 : 0,
             transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.15s",
           }}
@@ -160,61 +159,71 @@ export default function Hero() {
               alt="The VINCE — illustrated figure holding a globe and a card reading VINCE"
               fill
               priority
-              sizes="(max-width: 768px) 100vw, 66vw"
+              sizes="(max-width: 768px) 100vw, 70vw"
               style={{ objectFit: "contain", objectPosition: "right bottom" }}
               onLoad={() => setLoaded(true)}
               onError={() => setLoaded(true)}
             />
+
+            {/* ──────────────────────────────────────────────────────
+                SPINNING GLOBE OVERLAY — sits exactly on top of the
+                globe drawn in the source image, so it reads as "the
+                globe itself is rotating" rather than a decorative ring
+                floating nearby. It works by cropping the SAME image to
+                a tight square window around the globe's known position
+                (estimated from your screenshot — globe sits at roughly
+                x:23–53%, y:68–98% of the figure box) and clipping that
+                crop into a circle.
+
+                NOTE: these left/top/width/objectPosition/scale values
+                are estimates from the screenshot, not a verified pixel
+                measurement of the source file (I can't fetch the
+                Cloudinary URL directly from here). You will very likely
+                need to nudge left/top/scale slightly once you see it
+                live — adjust left/top in small steps (1-2% at a time)
+                and increase/decrease the scale() value until the circle
+                lines up exactly over the drawn globe.
+            ────────────────────────────────────────────────────────── */}
+            <div
+              ref={globeRef}
+              className="absolute rounded-full overflow-hidden"
+              style={{
+                left: "23%",
+                top: "66%",
+                width: "29%",
+                aspectRatio: "1 / 1",
+                animation: "globe-spin 13s linear infinite",
+                opacity: loaded ? 1 : 0,
+                transition: "opacity 1s ease 0.5s",
+              }}
+            >
+              <Image
+                src={IMAGE_URL}
+                alt=""
+                aria-hidden="true"
+                fill
+                sizes="20vw"
+                style={{
+                  objectFit: "cover",
+                  // Scales the full image up so only the globe's square
+                  // region fills this circular window. scale ≈ 100/29
+                  // ≈ 3.45x given the window is 29% of the figure box.
+                  objectPosition: "21% 78%",
+                  transform: "scale(3.45)",
+                }}
+              />
+            </div>
           </div>
         </div>
 
         {/* ══════════════════════════════════════════════════════════
-            GLOBE ACCENT RING — a thin spinning ring positioned where
-            the globe sits in the illustration, roughly aligned over it.
-            This avoids needing exact pixel coordinates of the globe in
-            the source file: rather than masking/cloning the image
-            (fragile if the crop math is off, as the last version
-            proved), this is a separate decorative ring drawn entirely
-            in CSS that sits centered on the globe's approximate
-            position and spins independently. It reads as "this object
-            is alive / being balanced" without requiring the image
-            itself to be sliced apart.
-            Position is expressed as % of the FIGURE BOX (the div
-            above), tuned to the proportions visible in the reference
-            screenshot — globe center sits ~14% in from the figure
-            box's left edge, ~46% down from its top.
-        ══════════════════════════════════════════════════════════ */}
-        <div
-          className="absolute top-[8%] right-0 bottom-0 pointer-events-none"
-          style={{ zIndex: 4, width: "min(66vw, 100%)" }}
-          aria-hidden="true"
-        >
-          <div
-            ref={globeRef}
-            className="absolute rounded-full"
-            style={{
-              left: "14%",
-              top: "44%",
-              width: "min(15vw, 130px)",
-              aspectRatio: "1 / 1",
-              border: "1.5px dashed rgba(0,0,0,0.55)",
-              animation: "globe-spin 16s linear infinite",
-              opacity: loaded ? 0.9 : 0,
-              transition: "opacity 1s ease 0.6s",
-            }}
-          />
-        </div>
-
-        {/* ══════════════════════════════════════════════════════════
             TYPOGRAPHY ZONE
-            min(42vw, ...) with a hard floor (300px) guarantees this
+            min(44vw, 560px) with a hard floor (280px) guarantees this
             zone — and therefore the headline inside it — never gets
-            squeezed to nothing on narrow viewports. The clamp() bounds
-            on font-size were chosen so that even the longest line
-            ("DIRECTOR", 8 characters) fits inside this zone's minimum
-            width at the clamp's maximum size — checked against
-            Archivo Black's approximate character width (~0.62× the
-            font-size per character at this weight).
+            squeezed to nothing on narrow viewports. Anton is a
+            condensed face (narrower per-character than Archivo Black),
+            so the clamp() max (104px) leaves comfortable margin for
+            "DIRECTOR" even at the zone's minimum width.
         ══════════════════════════════════════════════════════════ */}
         <div
           className="absolute top-0 left-0 bottom-0 flex flex-col justify-center"
@@ -229,10 +238,11 @@ export default function Hero() {
           <h1
             className="text-black uppercase"
             style={{
-              fontFamily: "'Archivo Black', sans-serif",
+              fontFamily: "'Anton', 'Archivo Black', sans-serif",
+              fontWeight: 400,
               fontSize: "clamp(40px, 9.5vw, 104px)",
-              lineHeight: 1.0,
-              letterSpacing: "-0.015em",
+              lineHeight: 0.94,
+              letterSpacing: "-0.01em",
             }}
           >
             <span
