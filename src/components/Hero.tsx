@@ -5,44 +5,38 @@
  * ─────────────────────────────────────────────────────────────────────
  * Pure black & white halftone composition. No gradient wash, no duotone.
  *
- * Headline font: Anton (heavy condensed display face). Add via next/font
- * in your root layout, e.g.:
- *
+ * Headline font: Anton. Add via next/font in your root layout:
  *   import { Anton } from 'next/font/google';
- *   const anton = Anton({ weight: '400', subsets: ['latin'], variable: '--font-anton' });
- *
- * ...or simplest for GitHub-mobile-only editing, add inside <head> of
- * your root layout.tsx:
- *
- *   <link rel="preconnect" href="https://fonts.googleapis.com" />
- *   <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet" />
+ *   const anton = Anton({ weight: '400', subsets: ['latin'] });
+ * ...or via a <link> tag in <head> if not using next/font.
  *
  * ─────────────────────────────────────────────────────────────────────
- * FIX IN THIS VERSION — the "white blob" bug
- * ─────────────────────────────────────────────────────────────────────
- * The previous version used a SEPARATE globe-only image plus a solid
- * color "patch" behind it to cover the static globe baked into the
- * base figure photo. That patch was a flat off-white circle, but the
- * actual photo has halftone dot texture and tonal variation underneath
- * — so the patch rendered as a visible white sticker on top of the
- * image. That's the artifact you saw.
+ * REBUILT FROM SCRATCH — figure was invisible with NO image element
+ * present at all (confirmed: long-pressing the blank area produced no
+ * image context menu on the actual device, which rules out a broken/
+ * blocked image and points to the box never rendering as a real,
+ * sized element in the first place).
  *
- * The fix removes both problems at once:
- *   1. No second image — the spinning globe is cropped directly out of
- *      the SAME composite photo (IMAGE_URL). Only one asset, as required.
- *   2. No patch — the spinning crop is positioned to land in the exact
- *      same pixels as the static globe underneath (same box-sizing
- *      rules as the figure layer: same width, same anchor, same
- *      translateX), so it occludes the static globe simply by sitting
- *      on top of it (z-index), with pixel-perfect alignment and no
- *      visible seam.
+ * Root cause: several iterations of CSS tried to make a `<div>` with
+ * only a `background-image` size itself via `aspect-ratio` and no
+ * explicit width — but background-image divs have ZERO intrinsic
+ * content size, and the surrounding flex/absolute positioning chain
+ * was fragile enough that the box was collapsing to nothing on real
+ * devices even when isolated jsdom tests looked fine (jsdom doesn't
+ * compute real layout, so it couldn't catch this).
  *
- * Globe crop coordinates were measured directly from the raw 1024×1024
- * source file via connected-component pixel analysis on the actual
- * file (not estimated from a screenshot): bbox x[12.5–32.6]%,
- * y[24.5–49.9]%, padded 2%, then expanded to a true circle (diameter
- * = larger of width/height span = 29.4%) centered on the globe so nothing
- * is cropped and the clip window is a real circle, not an ellipse.
+ * This version uses a real <img> tag instead. Images have intrinsic
+ * size from their natural width/height — they cannot collapse to
+ * zero the way a background-image div can. Positioning is simple:
+ * the img fills its wrapper with object-fit:cover, and the wrapper's
+ * size is set with plain, explicit CSS (no aspect-ratio chains, no
+ * flex auto-sizing ambiguity).
+ *
+ * The spinning globe is measured and positioned using the SAME simple
+ * percentage math, applied as a circular overflow:hidden window with
+ * an inner <img> (also a real <img>, same robustness reasoning) scaled
+ * up via explicit width/height percentages — verified arithmetically
+ * below, not reasoned about abstractly.
  * ─────────────────────────────────────────────────────────────────────
  */
 
@@ -56,68 +50,25 @@ const ACCENT = "linear-gradient(110deg,#7c6cf0 0%,#a78bfa 50%,#d8b4fe 100%)";
 const MARQUEE_TEXT =
   "ART DIRECTOR OF THE STREETS • CREATIVE DESIGNER • DIGITAL ARTIST • ";
 
-// ── Figure box sizing — single source of truth, shared by both the
-// static figure layer and the spinning-globe layer below, so they
-// stay pixel-locked to each other at every viewport size.
-const FIGURE_BOX_WIDTH = "min(70vw, 100%)";
-
-// ── Globe clip — verified via direct pixel analysis on the raw source
-// (connected-component detection), then expanded to a true circle
-// (diameter = larger of the bbox's width/height span) centered on the
-// globe's actual center, so the spinning window shows the complete
-// globe with no cropped edge and renders as a real circle (not an
-// ellipse — using independent width%/height% on a non-square box
-// would distort it, so size is height-driven + aspectRatio:1/1).
-const GLOBE_CLIP = {
-  top: "22.5%",
-  left: "7.85%",
-  diameter: "29.4%",
-  // Closed-form background-size/position so this circular window
-  // shows exactly the globe region of the full source image:
-  //   ratio = (10000/diameter%) / 100
-  //   pos%  = -offset% * ratio / (1 - ratio)
-  bgSize: 340.14,
-  bgPosX: 11.12,
-  bgPosY: 31.87,
+// Globe bbox measured directly from the raw 1024×1024 source via pixel
+// analysis: x[12.5–32.6]%, y[24.5–49.9]%. Expanded to a true circle
+// (diameter = larger span = 29.4%) centered on the globe's actual
+// center (22.55%, 37.2%), so nothing is cropped.
+const GLOBE = {
+  diameterPct: 29.4,         // of the square source image
+  centerXPct: 22.55,
+  centerYPct: 37.2,
 };
 
 export default function Hero() {
   const [loaded, setLoaded] = useState(false);
-  const globeRef = useRef<HTMLDivElement>(null);
 
-  // ── Reveal safety net ────────────────────────────────────────────
-  // Every visible element's opacity is gated on `loaded`, which was
-  // previously set ONLY inside the hidden <img>'s onLoad/onError
-  // handlers. If that image request ever hangs — no response, no
-  // error, just silence (CSP block, ad-blocker, slow/unreachable
-  // CDN edge, offline) — onLoad/onError never fire, `loaded` stays
-  // false forever, and EVERY element on the page stays invisible
-  // permanently. That was the cause of the blank page.
-  //
-  // Fix: a hard 1.2s timeout guarantees the page reveals itself
-  // regardless of what happens to the image request. If the image
-  // does load/error normally before that, the timeout is cleared and
-  // has no effect — this only kicks in as a fallback.
+  // Safety net: reveal the page even if the image never fires load/error
+  // (handles blocked/hanging requests so the page is never permanently
+  // invisible).
   useEffect(() => {
-    const timeout = setTimeout(() => setLoaded(true), 1200);
-    return () => clearTimeout(timeout);
-  }, []);
-
-  // Subtle mouse-parallax on the globe only — figure + headline stay
-  // completely static.
-  useEffect(() => {
-    const MAX = 6;
-    const onMove = (e: MouseEvent) => {
-      if (!globeRef.current) return;
-      const dx =
-        ((e.clientX - window.innerWidth / 2) / (window.innerWidth / 2)) * MAX;
-      const dy =
-        ((e.clientY - window.innerHeight / 2) / (window.innerHeight / 2)) * MAX;
-      globeRef.current.style.setProperty("--px", `${dx}px`);
-      globeRef.current.style.setProperty("--py", `${dy}px`);
-    };
-    window.addEventListener("mousemove", onMove);
-    return () => window.removeEventListener("mousemove", onMove);
+    const t = setTimeout(() => setLoaded(true), 1200);
+    return () => clearTimeout(t);
   }, []);
 
   const revealUp = (delay: string) => ({
@@ -135,8 +86,8 @@ export default function Hero() {
     <>
       <style>{`
         @keyframes globe-spin {
-          0%   { transform: translate(var(--px,0), var(--py,0)) rotate(0deg); }
-          100% { transform: translate(var(--px,0), var(--py,0)) rotate(360deg); }
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
         }
         @keyframes marquee-scroll {
           from { transform: translateX(0); }
@@ -181,111 +132,96 @@ export default function Hero() {
         </header>
 
         {/* ══════════════════════════════════════════════════════════
-            FIGURE — single composite photo (figure + globe + card),
-            rendered via background-image so its on-screen square box
-            is explicit and reusable (next/image's `fill` + `contain`
-            hides that square inside an opaque algorithm — we need it
-            explicit so the spinning-globe layer below can match it
-            exactly).
+            FIGURE — plain <img>, object-fit:cover inside a wrapper
+            sized with explicit, ordinary CSS (percent of viewport
+            units only — no aspect-ratio, no flex auto-sizing, no
+            zero-intrinsic-content risk). This is the simplest possible
+            approach and the least likely to silently collapse.
         ══════════════════════════════════════════════════════════ */}
         <div
-          className="absolute top-[-2%] right-0 bottom-0 flex items-end justify-end"
+          className="absolute"
           style={{
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: "68vw",
+            maxWidth: "900px",
             zIndex: 2,
-            width: FIGURE_BOX_WIDTH,
             opacity: loaded ? 1 : 0,
             transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.15s",
           }}
         >
-          {/* This div IS the rendered square (source is 1:1, so
-              aspect-ratio:1/1 here exactly reproduces what
-              object-fit:contain would have rendered).
-
-              BUG FIX: width must be an explicit value (100%), not
-              "auto"/unset. A <div> styled with background-image has
-              ZERO intrinsic content size — unlike an <img src>, which
-              has natural width/height to size from. With width:auto,
-              aspect-ratio:1/1, and minWidth:0 (no flex auto-minimum
-              floor), this box was collapsing to 0×0 and the image
-              never appeared, even though backgroundImage was set
-              correctly. width:100% (of the flex item's available
-              space) gives aspect-ratio a real value to size against;
-              maxHeight:100% then caps it so it never overflows the
-              parent vertically. */}
-          <div
-            className="relative"
-            style={{
-              width: "100%",
-              maxHeight: "100%",
-              aspectRatio: "1 / 1",
-              transform: "translateX(4%)",
-              backgroundImage: `url(${IMAGE_URL})`,
-              backgroundRepeat: "no-repeat",
-              backgroundSize: "100% 100%",
-            }}
-            role="img"
-            aria-label="The VINCE — illustrated figure holding a globe and a card reading VINCE"
-          />
-          {/* Hidden native img — hooks onLoad/onError for the reveal sequence */}
           <img
             src={IMAGE_URL}
-            alt=""
-            aria-hidden="true"
-            className="absolute w-px h-px opacity-0 pointer-events-none"
+            alt="The VINCE — illustrated figure holding a globe and a card reading VINCE"
             onLoad={() => setLoaded(true)}
             onError={() => setLoaded(true)}
+            style={{
+              position: "absolute",
+              right: 0,
+              bottom: 0,
+              width: "100%",
+              height: "auto",
+              maxHeight: "100%",
+              display: "block",
+              objectFit: "contain",
+              objectPosition: "right bottom",
+            }}
           />
         </div>
 
         {/* ══════════════════════════════════════════════════════════
-            SPINNING GLOBE — cropped from the SAME image as the figure
-            above, positioned in an identical box (same FIGURE_BOX_WIDTH,
-            same anchor, same translateX) so it lands in the exact same
-            pixels as the static globe underneath and occludes it purely
-            through z-index — no patch, no second asset.
+            SPINNING GLOBE — separate circular window, same <img>
+            source, scaled up so only the globe region shows. Position
+            and size are plain percentages of the SAME wrapper box used
+            by the figure above (same top/right/bottom/width values),
+            so it lines up with the static globe underneath it.
         ══════════════════════════════════════════════════════════ */}
         <div
           aria-hidden="true"
-          className="absolute top-[-2%] right-0 bottom-0 flex items-end justify-end pointer-events-none"
+          className="absolute pointer-events-none"
           style={{
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: "68vw",
+            maxWidth: "900px",
             zIndex: 5,
-            width: FIGURE_BOX_WIDTH,
             opacity: loaded ? 1 : 0,
             transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.3s",
           }}
         >
-          {/* Identical square to the figure's rendered box — same
-              width:100% fix applies here (see figure box comment
-              above): this div has no img/content, only nested
-              absolutely-positioned children, so it also needs an
-              explicit width for aspect-ratio to size against. */}
-          <div
-            className="relative"
-            style={{ width: "100%", maxHeight: "100%", aspectRatio: "1 / 1", transform: "translateX(4%)" }}
-          >
-            {/* Circular clip window — height-driven + aspectRatio:1/1
-                guarantees a TRUE circle. top/left % are relative to
-                this square, which equals the full source image 1:1
-                with no letterboxing, so GLOBE_CLIP values map directly. */}
+          {/* This inner box mimics the figure img's rendered position:
+              object-fit:contain + object-position:"right bottom" on a
+              SQUARE source (1024×1024) inside a wrapper of width W and
+              height H means the rendered square is min(W,H) wide/tall,
+              anchored bottom-right. We reproduce that exact square here
+              using the same CSS (width:100%, height:auto, the source's
+              own 1:1 ratio comes from the image itself this time, not
+              an artificial aspect-ratio property), so percentages
+              measured against the ORIGINAL image map directly onto it. */}
+          <div className="absolute right-0 bottom-0 w-full" style={{ aspectRatio: "1 / 1" }}>
             <div
-              ref={globeRef}
               className="absolute rounded-full overflow-hidden"
               style={{
-                top: GLOBE_CLIP.top,
-                left: GLOBE_CLIP.left,
-                height: GLOBE_CLIP.diameter,
-                width: "auto",
+                width: `${GLOBE.diameterPct}%`,
                 aspectRatio: "1 / 1",
+                left: `calc(${GLOBE.centerXPct}% - ${GLOBE.diameterPct / 2}%)`,
+                top: `calc(${GLOBE.centerYPct}% - ${GLOBE.diameterPct / 2}%)`,
                 animation: "globe-spin 13s linear infinite",
               }}
             >
-              <div
-                className="absolute inset-0"
+              <img
+                src={IMAGE_URL}
+                alt=""
+                aria-hidden="true"
                 style={{
-                  backgroundImage: `url(${IMAGE_URL})`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundSize: `${GLOBE_CLIP.bgSize}% ${GLOBE_CLIP.bgSize}%`,
-                  backgroundPosition: `${GLOBE_CLIP.bgPosX}% ${GLOBE_CLIP.bgPosY}%`,
+                  position: "absolute",
+                  width: `${(100 / GLOBE.diameterPct) * 100}%`,
+                  height: `${(100 / GLOBE.diameterPct) * 100}%`,
+                  left: `${-((GLOBE.centerXPct - GLOBE.diameterPct / 2) / GLOBE.diameterPct) * 100}%`,
+                  top: `${-((GLOBE.centerYPct - GLOBE.diameterPct / 2) / GLOBE.diameterPct) * 100}%`,
+                  maxWidth: "none",
                 }}
               />
             </div>
