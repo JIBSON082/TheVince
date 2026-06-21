@@ -114,7 +114,7 @@ export default function Hero() {
           style={{ zIndex: 9, ...revealDown("0.05s") }}
         >
           <span
-            className="text-black/70 text-[42px] tracking-[0.09em] uppercase"
+            className="text-black/70 text-[10.5px] tracking-[0.09em] uppercase"
             style={{ fontFamily: "'Space Mono', monospace" }}
           >
             © Design by The VINCE
@@ -122,7 +122,7 @@ export default function Hero() {
 
           <button
             aria-label="Open navigation menu"
-            className="flex items-center gap-2 text-black/70 text-[42px] tracking-[0.09em] uppercase bg-transparent border-0 cursor-pointer hover:opacity-100 transition-opacity duration-200"
+            className="flex items-center gap-2 text-black/70 text-[10.5px] tracking-[0.09em] uppercase bg-transparent border-0 cursor-pointer hover:opacity-100 transition-opacity duration-200"
             style={{ fontFamily: "'Space Mono', monospace" }}
           >
             <span
@@ -137,9 +137,6 @@ export default function Hero() {
         {/* ══════════════════════════════════════════════════════════
             FIGURE — natural aspect ratio, bottom + right anchored.
             object-fit: contain means NOTHING is cropped or stretched.
-            Raised from the previous version (top-[8%] → top-[-2%], and
-            wider box) so the figure sits higher in the frame and
-            reads larger — per "enlarge it up a bit" feedback.
         ══════════════════════════════════════════════════════════ */}
         <div
           className="absolute top-[-2%] right-0 bottom-0 flex items-end justify-end"
@@ -164,54 +161,70 @@ export default function Hero() {
               onLoad={() => setLoaded(true)}
               onError={() => setLoaded(true)}
             />
+          </div>
+        </div>
 
-            {/* ──────────────────────────────────────────────────────
-                SPINNING GLOBE OVERLAY — sits exactly on top of the
-                globe drawn in the source image.
+        {/* ══════════════════════════════════════════════════════════
+            SPINNING GLOBE OVERLAY — STANDALONE, ANCHORED TO SECTION
+            (not nested inside the figure box anymore).
 
-                These coordinates were measured directly off the live
-                screenshot you sent (not estimated) — the figure box
-                spans roughly x:230–700px / y:996–1426px in that 720px-
-                wide screenshot, and the actual round globe (continents
-                texture, bottom-left of the figure) spans roughly
-                x:270–410px / y:1115–1255px within it. Converted to %
-                of the figure box: left≈8.5%, top≈27.7%, width≈30%,
-                height≈33%. The previous values (left:23%, top:66%)
-                were a rough guess and landed on his shoulder/jacket
-                instead — this replaces them with the measured ones.
-            ────────────────────────────────────────────────────────── */}
+            WHY THIS CHANGED: the previous version nested this inside
+            the figure's box and used percentages relative to that box.
+            But that box (because of object-fit:contain + a "-2% top"
+            offset) has a lot of invisible empty space above the actual
+            artwork — so percentages measured against the visible image
+            in a screenshot didn't match percentages of the true box.
+            That's why it drifted up into empty space above the
+            headline.
+
+            THIS VERSION instead positions directly against the
+            <section> (the full hero viewport), using values tuned
+            from your actual screenshot at 720px width. All 4 tuning
+            numbers are collected in ONE place below — if it's still
+            off, change ONLY these four lines (not the JSX):
+        ══════════════════════════════════════════════════════════ */}
+        {(() => {
+          // ── TUNE THESE FOUR VALUES ONLY ──────────────────────────
+          const GLOBE_LEFT = "37.5%";   // distance from left edge of viewport
+          const GLOBE_TOP = "70.7%";    // distance from top edge of viewport
+          const GLOBE_SIZE = "19.5vw";  // diameter of the circle
+          const GLOBE_ZOOM = 3.5;       // how zoomed-in the image is inside the circle
+          // ──────────────────────────────────────────────────────────
+          return (
             <div
-              ref={globeRef}
-              className="absolute rounded-full overflow-hidden"
+              className="absolute pointer-events-none"
               style={{
-                left: "8.5%",
-                top: "27.7%",
-                width: "30%",
+                zIndex: 6,
+                left: GLOBE_LEFT,
+                top: GLOBE_TOP,
+                width: GLOBE_SIZE,
+                maxWidth: "170px",
                 aspectRatio: "1 / 1",
-                animation: "globe-spin 13s linear infinite",
                 opacity: loaded ? 1 : 0,
                 transition: "opacity 1s ease 0.5s",
               }}
             >
-              <Image
-                src={IMAGE_URL}
-                alt=""
-                aria-hidden="true"
-                fill
-                sizes="20vw"
-                style={{
-                  objectFit: "cover",
-                  // Anchor point = center of the measured crop window
-                  // (23.4%, 44%), scaled up so only that globe-sized
-                  // region fills this circular frame. scale ≈ 100/30
-                  // ≈ 3.3x given the window is ~30% of the figure box.
-                  objectPosition: "23.4% 44%",
-                  transform: "scale(3.3)",
-                }}
-              />
+              <div
+                ref={globeRef}
+                className="relative w-full h-full rounded-full overflow-hidden"
+                style={{ animation: "globe-spin 13s linear infinite" }}
+              >
+                <Image
+                  src={IMAGE_URL}
+                  alt=""
+                  aria-hidden="true"
+                  fill
+                  sizes="20vw"
+                  style={{
+                    objectFit: "cover",
+                    objectPosition: "21% 64%",
+                    transform: `scale(${GLOBE_ZOOM})`,
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* ══════════════════════════════════════════════════════════
             TYPOGRAPHY ZONE
@@ -286,7 +299,7 @@ export default function Hero() {
             {[0, 1].map((i) => (
               <span
                 key={i}
-                className="text-black/80 text-[25px] tracking-[0.18em] uppercase px-4 flex-shrink-0"
+                className="text-black/80 text-[10px] tracking-[0.18em] uppercase px-4 flex-shrink-0"
                 style={{ fontFamily: "'Space Mono', monospace" }}
               >
                 {MARQUEE_TEXT.repeat(8)}
