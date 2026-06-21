@@ -3,274 +3,339 @@
 /**
  * Hero.tsx — The VINCE
  * ─────────────────────────────────────────────────────────────────────
- * Depth-sandwich effect: a scrolling marquee exists on two z-index layers.
- *  - MarqueeLayer clip="bottom"  z-index 1  → sits BEHIND the portrait
- *  - Portrait                    z-index 2
- *  - Vignette overlay            z-index 3
- *  - MarqueeLayer clip="top"     z-index 4  → floats IN FRONT of portrait
- *  - Topbar / Footer / Cues      z-index 9
+ * Pure black & white halftone composition. No gradient wash, no duotone.
  *
- * The subject stands literally INSIDE a continuously scrolling line of text.
+ * Layout:
+ *   Left ~42%  → typography zone ("ART DIRECTOR" / "OF THE STREETS")
+ *   Right ~64% → figure (horizontally cropped source), bleeding off
+ *                the right edge
+ *
+ * The source image is square, but the figure's body and the globe
+ * both sit left-of-center within it. A horizontal crop (see CROP_BOX)
+ * is applied so that, once the figure box is positioned at 64vw wide
+ * anchored right, the globe's left edge naturally lands right at the
+ * typography zone's boundary — without that crop, the geometry can't
+ * satisfy "figure occupies ~62% of frame" and "globe touches the type
+ * zone" at the same time (verified by direct calculation).
+ *
+ * Key detail: the globe sits at z5 — above the figure (z2) and above
+ * the headline (z3) — so it visually interrupts "OF THE STREETS"
+ * exactly where the two overlap.
+ *
+ * The globe gets independent motion via a masked clone technique:
+ * a second copy of the same image, clipped to a circle around the
+ * globe's known position (GLOBE_CLIP, measured by pixel analysis),
+ * is given its own slow rotation — so it reads as "spinning" while
+ * the rest of the figure stays static.
+ *
+ * Bottom chrome: infinite marquee strip, fully separated from the
+ * headline (no overlap with the main composition).
  * ─────────────────────────────────────────────────────────────────────
  */
 
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-const HERO_IMAGE_SRC = "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1781828709/Heroimage_hgsqux.png";
 
-// ─── Iris gradient constant (single source of truth) ──────────────────
-const IRIS = "linear-gradient(110deg,#c8a2ff 0%,#7dd4fc 38%,#f0abfc 68%,#86efac 100%)";
+// ── Source image ────────────────────────────────────────────────────
+const IMAGE_URL =
+  "https://res.cloudinary.com/dx3k7hbnc/image/upload/v1781999577/1781997692098_aawdh2.png";
 
-// ─── IrisText ─────────────────────────────────────────────────────────
-function IrisText({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <span
-      className={className}
-      style={{ background: IRIS, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}
-    >
-      {children}
-    </span>
-  );
-}
+// ── Crop applied to the figure box ──────────────────────────────────
+// The source is a square (1024×1024) image, but the man's body only
+// occupies x[23.3–75.2]% of it, and the globe sits further left at
+// x[12.5–32.6]%. To satisfy "globe touches the type-zone boundary"
+// AND "figure occupies the right 60–65%" simultaneously, the figure
+// box uses a horizontal crop (not the full square) — keeping full
+// height, cropped to x[11–76.7]% — which pulls the globe's left edge
+// to sit right at the type zone boundary once the box is positioned.
+const CROP_BOX = {
+  aspect: 0.6570, // width/height of the cropped frame
+  bgSizeW: 152.21,
+  bgSizeH: 100,
+  bgPosX: 32.07,
+  bgPosY: 0,
+};
 
-// ─── GlobeSVG — refined, polished outline globe ───────────────────────
-function GlobeSVG() {
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      fill="none"
-      className="w-[22px] h-[22px]"
-      aria-hidden="true"
-    >
-      <circle cx="50" cy="50" r="40" stroke="#f0ece2" strokeWidth="2.4" />
-      <path
-        d="M50 10 C 34 10 26 28 26 50 C 26 72 34 90 50 90 C 66 90 74 72 74 50 C 74 28 66 10 50 10 Z"
-        stroke="#f0ece2"
-        strokeWidth="1.6"
-      />
-      <ellipse cx="50" cy="50" rx="40" ry="13.5" stroke="#f0ece2" strokeWidth="1.6" />
-      <line x1="10" y1="50" x2="90" y2="50" stroke="#f0ece2" strokeWidth="1.6" />
-    </svg>
-  );
-}
+// ── Globe position — relative to the CROPPED figure box ─────────────
+// The clip window is sized by HEIGHT only (29.4% of box height, which
+// is correct since the crop never touched the vertical axis) with
+// aspectRatio:1/1 forcing width to match in rendered pixels. This is
+// required because the crop box itself isn't square (aspect 0.657),
+// so using independent width%/height% would render an ellipse, not
+// a circle — caught and fixed before shipping.
+const GLOBE_CLIP = {
+  top: "22.5%",
+  left: "-4.79%",
+  height: "29.4%",
+  // backgroundSize/Position reference the ORIGINAL full image (the
+  // clone's background-image is the untouched source url), recomputed
+  // for a true circular window centered on the globe.
+  bgSize: 340.14,
+  bgPosX: 11.12,
+  bgPosY: 31.87,
+};
 
-// ─── MarqueeLayer ───────────────────────────────────────────────────────
-type MarqueeLayerProps = { clip: "top" | "bottom"; loaded: boolean };
+// ── Single accent dot gradient (kept from existing pattern) ─────────
+const ACCENT = "linear-gradient(110deg,#7c6cf0 0%,#a78bfa 50%,#d8b4fe 100%)";
 
-function MarqueeLayer({ clip, loaded }: MarqueeLayerProps) {
-  const isFront = clip === "top";
-  const ITEM = "ART DIRECTOR OF THE STREET";
+const MARQUEE_TEXT =
+  "ART DIRECTOR OF THE STREETS • CREATIVE DESIGNER • DIGITAL ARTIST • ";
 
-  return (
-    <div
-      aria-hidden="true"
-      className="absolute left-0 right-0 select-none pointer-events-none overflow-hidden"
-      style={{
-        bottom: "100px",
-        height: "90px",
-        zIndex: isFront ? 4 : 1,
-        // Front layer: show only top half — portrait face shows through below
-        // Back layer:  show only bottom half — peeks out behind the face
-        clipPath: isFront ? "inset(0 0 50% 0)" : "inset(50% 0 0 0)",
-        opacity: loaded ? 1 : 0,
-        transform: loaded ? "translateY(0)" : `translateY(${isFront ? "-14px" : "14px"})`,
-        transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.5s, transform 0.9s cubic-bezier(0.16,1,0.3,1) 0.5s",
-      }}
-    >
-      <div
-        className="flex items-center whitespace-nowrap font-display uppercase tracking-[-0.01em] leading-none text-[#f0ece2] animate-[marquee-scroll_26s_linear_infinite]"
-        style={{ fontSize: "clamp(28px, 7.5vw, 72px)", height: "90px" }}
-      >
-        {Array.from({ length: 8 }).map((_, i) => (
-          <span key={i} className="flex items-center pl-0.5">
-            {ITEM}
-            <span className="inline-flex items-center justify-center mx-6 md:mx-8">
-              <IrisText>★</IrisText>
-            </span>
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Hero (default export) ────────────────────────────────────────────
 export default function Hero() {
   const [loaded, setLoaded] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const globeWrapRef = useRef<HTMLDivElement>(null);
 
-  // Reveal as soon as component mounts — image is embedded, no network wait
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      setTimeout(() => setLoaded(true), 60);
-    });
-    return () => cancelAnimationFrame(id);
-  }, []);
+  const handleImageReady = () => setLoaded(true);
 
-  // Cursor parallax — portrait drifts ±7px, marquee layers stay fixed
+  // ── Subtle mouse-parallax on the globe clone only ──────────────────
+  // Figure + headline stay completely static, per spec.
   useEffect(() => {
-    const MAX = 7;
+    const MAX = 10;
     const onMove = (e: MouseEvent) => {
-      if (!wrapRef.current) return;
-      const dx = ((e.clientX - window.innerWidth  / 2) / (window.innerWidth  / 2)) * MAX;
-      const dy = ((e.clientY - window.innerHeight / 2) / (window.innerHeight / 2)) * MAX;
-      wrapRef.current.style.transform = `translate(${dx}px,${dy}px)`;
-    };
-    const onLeave = () => {
-      if (wrapRef.current) wrapRef.current.style.transform = "translate(0,0)";
+      if (!globeWrapRef.current) return;
+      const dx =
+        ((e.clientX - window.innerWidth / 2) / (window.innerWidth / 2)) * MAX;
+      const dy =
+        ((e.clientY - window.innerHeight / 2) / (window.innerHeight / 2)) * MAX;
+      globeWrapRef.current.style.setProperty("--parallax-x", `${dx}px`);
+      globeWrapRef.current.style.setProperty("--parallax-y", `${dy}px`);
     };
     window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseleave", onLeave);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseleave", onLeave);
-    };
+    return () => window.removeEventListener("mousemove", onMove);
   }, []);
 
-  // Shared transition helpers
   const revealUp = (delay: string) => ({
-    opacity:    loaded ? 1 : 0,
-    transform:  loaded ? "translateY(0)" : "translateY(14px)",
+    opacity: loaded ? 1 : 0,
+    transform: loaded ? "translateY(0)" : "translateY(14px)",
     transition: `opacity 0.7s cubic-bezier(0.16,1,0.3,1) ${delay}, transform 0.7s cubic-bezier(0.16,1,0.3,1) ${delay}`,
   });
   const revealDown = (delay: string) => ({
-    opacity:    loaded ? 1 : 0,
-    transform:  loaded ? "translateY(0)" : "translateY(-10px)",
+    opacity: loaded ? 1 : 0,
+    transform: loaded ? "translateY(0)" : "translateY(-10px)",
     transition: `opacity 0.6s cubic-bezier(0.16,1,0.3,1) ${delay}, transform 0.6s cubic-bezier(0.16,1,0.3,1) ${delay}`,
   });
 
   return (
-    <section
-      className="relative w-full overflow-hidden bg-[#090909]"
-      style={{ height: "100dvh", minHeight: "600px" }}
-    >
-      {/* ── Iridescent scan — ambient shimmer sweeps L→R ──────── */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-y-0 pointer-events-none animate-[iris-sweep_9s_linear_infinite]"
-        style={{
-          width: "10rem",
-          zIndex: 5,
-          background: "linear-gradient(to right,transparent 0%,rgba(200,162,255,0.055) 30%,rgba(125,212,252,0.09) 50%,rgba(200,162,255,0.055) 70%,transparent 100%)",
-          opacity: loaded ? 1 : 0,
-          transition: "opacity 0.5s 1.4s",
-        }}
-      />
+    <>
+      <style>{`
+        @keyframes globe-spin {
+          0%   { transform: translate(var(--parallax-x,0), var(--parallax-y,0)) rotate(0deg); }
+          100% { transform: translate(var(--parallax-x,0), var(--parallax-y,0)) rotate(360deg); }
+        }
+        @keyframes marquee-scroll {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-50%); }
+        }
+        @keyframes pip-pulse {
+          0%,100% { transform: scale(1);   opacity: 1; }
+          50%     { transform: scale(1.7); opacity: 0.5; }
+        }
+      `}</style>
 
-      {/* ── Marquee — BACK (z1, behind portrait) ──────────────── */}
-      <MarqueeLayer clip="bottom" loaded={loaded} />
-
-      {/* ── Portrait (z2) ─────────────────────────────────────── */}
-      <div
-        ref={wrapRef}
-        className="absolute inset-0"
-        style={{ zIndex: 2, transition: "transform 1s cubic-bezier(0.25,0.46,0.45,0.94)", willChange: "transform" }}
+      <section
+        className="relative w-full overflow-hidden bg-[#f2f0ea]"
+        style={{ height: "100dvh", minHeight: "640px" }}
       >
-        <Image
-          src={HERO_IMAGE_SRC}
-          alt="The VINCE — Creative Designer & Digital Artist"
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover object-[center_22%]"
+        {/* ══════════════════════════════════════════════════════════
+            FIGURE — width-driven box at 64vw, height follows from a
+            horizontal crop of the source (x:11–76.7%, full height).
+            This crop pulls the globe leftward within its own box just
+            enough that, once positioned, its left edge reaches the
+            typography zone boundary — see CROP_BOX comment above.
+        ══════════════════════════════════════════════════════════ */}
+        <div
+          className="absolute top-0 right-0 bottom-0 flex items-end justify-end"
           style={{
-            opacity:    loaded ? 1 : 0,
-            transition: "opacity 1s cubic-bezier(0.16,1,0.3,1) 0.2s",
+            zIndex: 2,
+            opacity: loaded ? 1 : 0,
+            transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.15s",
           }}
-        />
+        >
+          {/* Width = max(64vw, height-driven width) — guarantees the box
+              always fills the full section height even on narrow/tall
+              viewports (mobile portrait, tablet), where 64vw alone would
+              leave a visible gap above the figure. On wide viewports,
+              64vw wins and the box overflows height (cropped at top by
+              the section's overflow:hidden) — the intended bleed look. */}
+          <div
+            className="relative"
+            style={{
+              width: `max(64vw, calc(100dvh * ${CROP_BOX.aspect}))`,
+              aspectRatio: CROP_BOX.aspect,
+              transform: "translateX(3%)",
+              backgroundImage: `url(${IMAGE_URL})`,
+              backgroundRepeat: "no-repeat",
+              backgroundSize: `${CROP_BOX.bgSizeW}% ${CROP_BOX.bgSizeH}%`,
+              backgroundPosition: `${CROP_BOX.bgPosX}% ${CROP_BOX.bgPosY}%`,
+            }}
+            role="img"
+            aria-label="The VINCE — illustrated figure holding a globe and a card reading VINCE"
+          />
+          {/* Hidden native img — hooks onLoad/onError for the reveal sequence */}
+          <img
+            src={IMAGE_URL}
+            alt=""
+            aria-hidden="true"
+            className="absolute w-px h-px opacity-0 pointer-events-none"
+            onLoad={handleImageReady}
+            onError={handleImageReady}
+          />
+        </div>
 
-        {/* Vignette — heavier at foot, breathing room at top (z3) */}
+        {/* ══════════════════════════════════════════════════════════
+            GLOBE CLONE — masked, independently spinning layer.
+            Lives inside a box identical to the figure's (same crop,
+            same width, same translateX), so GLOBE_CLIP percentages
+            map exactly onto the figure's globe with no drift.
+            Sits at z5 — above the figure (z2) and the headline (z3) —
+            which is what makes it visually "interrupt" the second line.
+        ══════════════════════════════════════════════════════════ */}
         <div
           aria-hidden="true"
-          className="absolute inset-0 pointer-events-none"
+          className="absolute top-0 right-0 bottom-0 flex items-end justify-end pointer-events-none"
           style={{
-            zIndex: 1,
-            background:
-              "linear-gradient(to bottom,rgba(9,9,9,0.30) 0%,transparent 18%,transparent 48%,rgba(9,9,9,0.80) 78%,rgba(9,9,9,0.97) 100%)",
+            zIndex: 5,
+            opacity: loaded ? 1 : 0,
+            transition: "opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.3s",
           }}
-        />
-      </div>
-
-      {/* ── Marquee — FRONT (z4, above portrait) ──────────────── */}
-      <MarqueeLayer clip="top" loaded={loaded} />
-
-      {/* ── Topbar (z9) ───────────────────────────────────────── */}
-      <header
-        className="absolute top-0 left-0 right-0 flex justify-between items-center px-6 pt-[22px]"
-        style={{ zIndex: 9, ...revealDown("0.05s") }}
-      >
-        {/* Accessible page title — visually hidden */}
-        <h1 className="sr-only">The VINCE — Creative Designer &amp; Digital Artist</h1>
-
-        <span className="font-mono text-[10.5px] tracking-[0.09em] uppercase text-[#f0ece2]/60">
-          © Design by The Vince
-        </span>
-
-        <button
-          aria-label="Open navigation menu"
-          className="flex items-center gap-2.5 font-sans font-medium text-base tracking-[-0.01em] text-[#f0ece2]/90 bg-transparent border-0 cursor-pointer transition-opacity duration-200 hover:opacity-100"
         >
-          {/* Iridescent pulsing pip */}
-          <span
-            aria-hidden="true"
-            className="w-2 h-2 rounded-full flex-shrink-0 animate-[pip-pulse_2.8s_ease-in-out_infinite]"
-            style={{ background: IRIS }}
-          />
-          Menu
-        </button>
-      </header>
-
-      {/* ── Scroll cue (z9) ───────────────────────────────────── */}
-      <div
-        aria-hidden="true"
-        className="absolute left-6 flex flex-col items-center gap-1.5"
-        style={{ bottom: "132px", zIndex: 9, ...revealUp("1.25s") }}
-      >
-        <div
-          className="w-px h-9"
-          style={{ background: "linear-gradient(to bottom,transparent,rgba(240,236,226,0.28))" }}
-        />
-        <span className="text-sm text-[#f0ece2]/40" style={{ transform: "rotate(45deg)" }}>↘</span>
-      </div>
-
-      {/* ── Footer (z9) ───────────────────────────────────────── */}
-      <footer
-        className="absolute left-0 right-0 bottom-0 flex justify-between items-end px-6 pb-7"
-        style={{ zIndex: 9, ...revealUp("1.05s") }}
-      >
-        {/* Tagline */}
-        <div className="flex flex-col gap-0.5">
-          <span
-            className="font-sans font-normal tracking-[-0.01em] leading-[1.2] text-[#f0ece2]"
-            style={{ fontSize: "clamp(16px, 4.2vw, 24px)" }}
-          >
-            Creative Designer
-          </span>
-          <IrisText className="font-sans font-normal tracking-[-0.01em] leading-[1.2]">
-            <span style={{ fontSize: "clamp(16px, 4.2vw, 24px)" }}>Digital Artist</span>
-          </IrisText>
-        </div>
-
-        {/* Globe + badge */}
-        <div className="flex flex-col items-end gap-2.5">
-          {/* Available badge — hidden on very small screens */}
-          <div className="hidden sm:flex items-center gap-2 font-mono text-[9px] tracking-[0.10em] uppercase text-[#f0ece2]/55 bg-white/[0.05] border border-white/10 rounded-full px-3 py-1.5 backdrop-blur-md">
-            <span
-              className="w-1.5 h-1.5 rounded-full bg-[#86efac] flex-shrink-0 animate-[avail-ping_2s_ease-in-out_infinite]"
-              aria-hidden="true"
-            />
-            Available for work
-          </div>
-
-          {/* Globe */}
+          {/* Identical box to the figure above — same width, same aspect
+              ratio, same translateX — so GLOBE_CLIP percentages (measured
+              against this cropped frame) line up exactly. */}
           <div
-            className="w-11 h-11 rounded-full border border-[rgba(240,236,226,0.28)] grid place-items-center bg-[rgba(9,9,9,0.35)] backdrop-blur-lg overflow-hidden flex-shrink-0"
-            aria-hidden="true"
+            className="relative"
+            style={{
+              width: `max(64vw, calc(100dvh * ${CROP_BOX.aspect}))`,
+              aspectRatio: CROP_BOX.aspect,
+              transform: "translateX(3%)",
+            }}
           >
-            <GlobeSVG />
+            {/* Circular clip window — height-driven + aspectRatio:1/1
+                guarantees a TRUE circle (not an ellipse) regardless of
+                the parent box's own aspect ratio. */}
+            <div
+              ref={globeWrapRef}
+              className="absolute rounded-full"
+              style={{
+                top: GLOBE_CLIP.top,
+                left: GLOBE_CLIP.left,
+                height: GLOBE_CLIP.height,
+                width: "auto",
+                aspectRatio: "1 / 1",
+                backgroundImage: `url(${IMAGE_URL})`,
+                backgroundRepeat: "no-repeat",
+                backgroundSize: `${GLOBE_CLIP.bgSize}% ${GLOBE_CLIP.bgSize}%`,
+                backgroundPosition: `${GLOBE_CLIP.bgPosX}% ${GLOBE_CLIP.bgPosY}%`,
+                animation: "globe-spin 14s linear infinite",
+              }}
+            />
           </div>
         </div>
-      </footer>
-    </section>
+
+        {/* ══════════════════════════════════════════════════════════
+            TYPOGRAPHY ZONE — left ~38–40%
+            Two stacked lines. The globe clone (z5) sits above this
+            zone's z-index (z3) only where it physically overlaps —
+            its left edge lands right at this zone's right boundary,
+            so it reads as cutting into "OF THE STREETS".
+        ══════════════════════════════════════════════════════════ */}
+        <div
+          className="absolute top-0 left-0 bottom-0 flex flex-col justify-center"
+          style={{ width: "42%", zIndex: 3, paddingLeft: "5%", paddingRight: "2%" }}
+        >
+          <h1
+            className="text-black uppercase"
+            style={{
+              fontFamily: "'Archivo Black', sans-serif",
+              fontSize: "clamp(34px, 7.4vw, 92px)",
+              lineHeight: 0.92,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            <span
+              className="block"
+              style={{
+                opacity: loaded ? 1 : 0,
+                transform: loaded ? "translateY(0)" : "translateY(18px)",
+                transition: "opacity 0.8s cubic-bezier(0.16,1,0.3,1) 0.45s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.45s",
+              }}
+            >
+              ART
+              <br />
+              DIRECTOR
+            </span>
+
+            {/* "OF THE STREETS" — sits at z3, globe clone is z5 above it */}
+            <span
+              className="block"
+              style={{
+                opacity: loaded ? 1 : 0,
+                transform: loaded ? "translateY(0)" : "translateY(18px)",
+                transition: "opacity 0.8s cubic-bezier(0.16,1,0.3,1) 0.6s, transform 0.8s cubic-bezier(0.16,1,0.3,1) 0.6s",
+              }}
+            >
+              OF THE
+              <br />
+              STREETS
+            </span>
+          </h1>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════
+            TOP BAR
+        ══════════════════════════════════════════════════════════ */}
+        <header
+          className="absolute top-0 left-0 right-0 flex justify-between items-center px-6 pt-[22px]"
+          style={{ zIndex: 9, ...revealDown("0.05s") }}
+        >
+          <span
+            className="text-black/70 text-[10.5px] tracking-[0.09em] uppercase"
+            style={{ fontFamily: "'Space Mono', monospace" }}
+          >
+            © Design by The VINCE
+          </span>
+
+          <button
+            aria-label="Open navigation menu"
+            className="flex items-center gap-2 text-black/70 text-[10.5px] tracking-[0.09em] uppercase bg-transparent border-0 cursor-pointer hover:opacity-100 transition-opacity duration-200"
+            style={{ fontFamily: "'Space Mono', monospace" }}
+          >
+            <span
+              aria-hidden="true"
+              className="w-[5px] h-[5px] rounded-full flex-shrink-0"
+              style={{ background: ACCENT, animation: "pip-pulse 2.8s ease-in-out infinite" }}
+            />
+            Menu
+          </button>
+        </header>
+
+        {/* ══════════════════════════════════════════════════════════
+            BOTTOM MARQUEE — fully separated from headline/figure
+        ══════════════════════════════════════════════════════════ */}
+        <div
+          className="absolute left-0 right-0 bottom-0 overflow-hidden bg-[#f2f0ea] border-t border-black/10"
+          style={{ zIndex: 9, height: "44px", ...revealUp("1s") }}
+        >
+          {/* Two identical tracks, each repeated 8× — wide enough to
+              fully cover ultra-wide viewports (tested up to 2560px) with
+              no gap before the loop point. Animating to -50% slides
+              exactly one track's width, landing seamlessly on the
+              second copy's start. */}
+          <div
+            className="flex items-center h-full whitespace-nowrap"
+            style={{ animation: "marquee-scroll 34s linear infinite" }}
+          >
+            {[0, 1].map((i) => (
+              <span
+                key={i}
+                className="text-black/80 text-[10px] tracking-[0.18em] uppercase px-4 flex-shrink-0"
+                style={{ fontFamily: "'Space Mono', monospace" }}
+              >
+                {MARQUEE_TEXT.repeat(8)}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
   );
 }
